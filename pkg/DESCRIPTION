@@ -1,0 +1,15 @@
+Package: manifestos
+Type: Package
+Title: Spatial Modelling of Party Manifestos
+Version: 0.4
+Date: 2011-03-6
+Author: Martin Elff
+Maintainer: Martin Elff <melff@essex.ac.uk>
+Description: This package provides an MCEM algorithm to
+  estimate the parameters of a spatial model for the
+  reconstruction of policy positions of political actors,
+  such as parties, based on manifesto data or, more generally,
+  based on multinomial counts.
+License: GPL-2
+LazyLoad: Yes
+Depends: Matrix, mvtnorm, munfold, memisc
