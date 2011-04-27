@@ -280,7 +280,7 @@ latpos.start <- function(resp,latent.dims,start,unfold.method,restrictions=stand
   phi <- crossprod(Q.phi,as.vector(A)-kappa.phi)
   A[] <- Q.phi%*%phi + kappa.phi
   B <- sweep(B%*%rot,2,transl,"-")
-browser()    
+   
   start$A <- A
   start$phi <- phi
   start$Q.phi <- Q.phi
