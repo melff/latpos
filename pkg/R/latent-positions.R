@@ -1,7 +1,6 @@
 
 latpos <- function(formula,data,subset,id,time,
                    unfold.method="Schoenemann",start=NULL,
-                   restrictions=NULL,
                    sampler=mvnorm.sampler(),
                    ...){
 
@@ -46,7 +45,7 @@ latpos <- function(formula,data,subset,id,time,
   start <- start[nzchar(names(start)) & !is.na(names(start))]
   
   start <- latpos.start(resp=resp,latent.dims=latent.dims,start=start,
-                        unfold.method=unfold.method)
+                        unfold.method=unfold.method,...)
   
   fit <- latpos.fit(resp=resp,
                     start=start,
@@ -74,7 +73,6 @@ latpos.start.default <- function(I,D,
                                  Sigma,
                                  rho,
                                  zeta,
-                                 restrictions=standard.restrictions(A),
                                  Q.gamma,
                                  ...
                                  ){
@@ -85,18 +83,6 @@ latpos.start.default <- function(I,D,
       free.Sigma=free.Sigma,
       free.rho=free.rho
     )
-
-  ## Matrix enforcing the linear restrictions
-  ## on A
-  rest.C <- restrictions$C
-  rest.d <- if(length(restrictions$d)) restrictions$d else numeric(nrow(rest.C))
-  Q.phi <- restrictor(C=rest.C,d=rest.d)
-  kappa.phi <- attr(Q.phi,"offset")
-  if(!missing(A)){
-    phi <- crossprod(Q.phi,as.vector(A)-kappa.phi)
-    A[] <- Q.phi%*%phi + kappa.phi 
-    start$A <- A
-  }
 
   if(!missing(beta))
     start$beta <- beta
@@ -121,7 +107,7 @@ latpos.start.default <- function(I,D,
       Q.gamma <- matrix(0,nrow=D1,ncol=D^2)
       Q.gamma[cbind(i,ij.1)] <- 1
       Q.gamma[cbind(i,ij.2)] <- -1
-      Q.gamma <- restrictor(Q.gamma)[,1,drop=FALSE]
+      Q.gamma <- restrictor(Q.gamma)$reduction[,1,drop=FALSE]
     }
     else if(free.Sigma=="diagonal"){
 
@@ -133,14 +119,14 @@ latpos.start.default <- function(I,D,
       Qltri.gamma <- Qltri.gamma[diag(Qltri.gamma)>0,,drop=FALSE]
 
       Q.gamma <- rbind(Qutri.gamma,Qltri.gamma)
-      Q.gamma <- restrictor(Q.gamma)
+      Q.gamma <- restrictor(Q.gamma)$reduction
     }
     else if(free.Sigma=="full"){
 
       GammaPat <- matrix(0,D,D)
       Qltri.gamma <- diag(x=as.numeric(lower.tri(GammaPat)))
       Qltri.gamma <- Qltri.gamma[diag(Qltri.gamma)>0,,drop=FALSE]
-      Q.gamma <- restrictor(Qltri.gamma)
+      Q.gamma <- restrictor(Qltri.gamma)$reduction
     }
   }
   start$Q.gamma <- Q.gamma
@@ -182,7 +168,7 @@ latpos.start.default <- function(I,D,
     Q.sigma <- matrix(0,nrow=DD2,ncol=D^2)
     Q.sigma[cbind(ii,ij)] <- 1
     Q.sigma[cbind(ii,ji)] <- -1
-    Q.sigma <- restrictor(Q.sigma)
+    Q.sigma <- restrictor(Q.sigma)$reduction
 
   } else if(free.Sigma=="diagonal"){
 
@@ -192,7 +178,7 @@ latpos.start.default <- function(I,D,
     Qltri.sigma <- Qltri.sigma[diag(Qltri.sigma)>0,,drop=FALSE]
 
     Q.sigma <- rbind(Qutri.sigma,Qltri.sigma)
-    Q.sigma <- restrictor(Q.sigma)
+    Q.sigma <- restrictor(Q.sigma)$reduction
 
   } else { #if(free.Sigma)=="scale"
 
@@ -205,7 +191,7 @@ latpos.start.default <- function(I,D,
     Q.sigma <- matrix(0,nrow=D1,ncol=D^2)
     Q.sigma[cbind(i,ij.1)] <- 1
     Q.sigma[cbind(i,ij.2)] <- -1
-    Q.sigma <- restrictor(Q.sigma)[,1,drop=FALSE]
+    Q.sigma <- restrictor(Q.sigma)$reduction[,1,drop=FALSE]
   }
   start$Q.sigma <- Q.sigma
 
@@ -249,7 +235,7 @@ latpos.control <- function(maxiter=200,
     )
 }
 
-latpos.start <- function(resp,latent.dims,start,unfold.method){
+latpos.start <- function(resp,latent.dims,start,unfold.method,restrictions=standard.restrictions,...){
 
   I <- nrow(resp$y)
   D <- length(latent.dims)
@@ -271,33 +257,33 @@ latpos.start <- function(resp,latent.dims,start,unfold.method){
   Tj1 <- tabulate(resp$j)
   Tj <- Tj1 - 1
   J <- length(Tj1)
+  
+  if(is.function(restrictions)) restrictions <- restrictions(A)
+  else if(is.list(restrictions)) restrictions <- restrictions[c("C","d")]
+  else stop("no support of restrictions with type",typeof(restrictions))
+  ## Matrix enforcing the linear restrictions
+  ## on A
+  rest.C <- restrictions$C
+  rest.d <- if(length(restrictions$d)) restrictions$d else numeric(nrow(rest.C))
+  A.restrictor <- restrictor(C=rest.C,d=rest.d)
+  Q.phi <- A.restrictor$reduction
+  kappa.phi <- A.restrictor$offset
 
-  if(D>1){
-    ## make sure the first D rows of
-    ## the starting value matrix are
-    ## lower triangular
-    A.D <- t(A[1:D,,drop=FALSE])
-    QR.A.D <- QR(A.D)
-    Q <- QR.A.D$Q
-    R <- QR.A.D$R
-
-    if(ncol(Q) < ncol(A.D)) stop("sorry, your starting value matrix is rank-deficient")
-
-    A <- A%*%Q
-    B <- B%*%Q
-    A[upper.tri(A)] <- 0 # eliminate effects of finite precision
-
-    browser()
-  }
-
-  Q.phi <- start$Q.phi
-  kappa.phi <- start$kappa.phi
-  Q.gamma <- start$Q.gamma
+  transf <- rotate.to.restriction(X=A,C=restrictions$C,d=restrictions$d)
+  A <- transf$transformed
+  rot <- transf$rotation
+  transl <- transf$translation
 
   phi <- crossprod(Q.phi,as.vector(A)-kappa.phi)
   A[] <- Q.phi%*%phi + kappa.phi
+  B <- sweep(B%*%rot,2,transl,"-")
+  
   start$A <- A
   start$phi <- phi
+  start$Q.phi <- Q.phi
+  start$kappa.phi <- kappa.phi
+
+  Q.gamma <- start$Q.gamma
 
   U <- scale(B,scale=FALSE)
   beta <- attr(U,"scaled:center")
@@ -523,19 +509,6 @@ latpos.fit <- function(resp,start,
 }
 
 
-
-standard.restrictions <- function(A){
-
-  upper.tri.A <- upper.tri(A)
-
-  C.tri <- diag(x=as.numeric(upper.tri.A))
-  C.tri <- C.tri[diag(C.tri)>0,]
-
-  C.sum <- t(diag(nrow=ncol(A)) %x% rep(1,nrow(A)))
-  C <- rbind(C.tri,C.sum)
-
-  list(C=C,d=numeric(nrow(C)))
-}
 
 
 

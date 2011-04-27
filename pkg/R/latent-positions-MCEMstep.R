@@ -145,32 +145,6 @@ latpos.MCEMstep <- function(resp,parm,
       maybe.converged <- FALSE
     }
 
-    if(maybe.converged){
-
-      if(latent.data$sample.size >= min.final.size)
-          converged<-TRUE
-      else{
-      
-        cat("\nMCEM algorithm may have converged, setting sample size to",min.final.size,"to be sure")
-        latent.data$sample.size <- min.final.size
-      }
-    }
-    else{
-
-      sample.size.new <- ceiling(sample.size.start*
-                                (2*qnorm(1-abs(diff.Q.alpha))/zval.diff.Q.psi)^2
-                              )
-      if(sample.size.new > max.size){
-        cat("\nMaximum sample size reached")
-        sample.size.new <- max.size
-        }
-        
-      if(sample.size.new > latent.data$sample.size){
-        cat("\nNew sample size",sample.size.new)
-        latent.data$sample.size <- sample.size.new
-        }
-    }
-
     ## First find the maximum of the integrand - for
     ## optimal importance sampling
     Utilde <- latpos.utilde(resp=resp,parm=parm,maxiter=maxiter,verbose=FALSE)
@@ -215,6 +189,32 @@ latpos.MCEMstep <- function(resp,parm,
     plot.ii <- first.plot.iter:iter
 
     plot.trace(plot.ii,trace$Q[plot.ii,,drop=FALSE],trace$psi[plot.ii,,drop=FALSE])
+  }
+
+  if(maybe.converged){
+
+    if(latent.data$sample.size >= min.final.size)
+        converged<-TRUE
+    else{
+
+      cat("\nMCEM algorithm may have converged, setting sample size to",min.final.size,"to be sure")
+      latent.data$sample.size <- min.final.size
+    }
+  }
+  else{
+
+    sample.size.new <- ceiling(sample.size.start*
+                              (2*qnorm(1-abs(diff.Q.alpha))/zval.diff.Q.psi)^2
+                            )
+    if(sample.size.new > max.size){
+      cat("\nMaximum sample size reached")
+      sample.size.new <- max.size
+      }
+
+    if(sample.size.new > latent.data$sample.size){
+      cat("\nNew sample size",sample.size.new)
+      latent.data$sample.size <- sample.size.new
+      }
   }
 
   if(converged){
