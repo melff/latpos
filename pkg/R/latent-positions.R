@@ -257,10 +257,11 @@ latpos.start <- function(resp,latent.dims,start,unfold.method,restrictions=stand
   Tj1 <- tabulate(resp$j)
   Tj <- Tj1 - 1
   J <- length(Tj1)
-  
+
   if(is.function(restrictions)) restrictions <- restrictions(A)
   else if(is.list(restrictions)) restrictions <- restrictions[c("C","d")]
   else stop("no support of restrictions with type",typeof(restrictions))
+
   ## Matrix enforcing the linear restrictions
   ## on A
   rest.C <- restrictions$C
@@ -270,14 +271,16 @@ latpos.start <- function(resp,latent.dims,start,unfold.method,restrictions=stand
   kappa.phi <- A.restrictor$offset
 
   transf <- rotate.to.restriction(X=A,C=restrictions$C,d=restrictions$d)
+  dimnA <- dimnames(A)
   A <- transf$transformed
   rot <- transf$rotation
   transl <- transf$translation
+  dimnames(A) <- dimnA
 
   phi <- crossprod(Q.phi,as.vector(A)-kappa.phi)
   A[] <- Q.phi%*%phi + kappa.phi
   B <- sweep(B%*%rot,2,transl,"-")
-  
+browser()    
   start$A <- A
   start$phi <- phi
   start$Q.phi <- Q.phi

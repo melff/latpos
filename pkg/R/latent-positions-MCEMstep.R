@@ -129,21 +129,50 @@ latpos.MCEMstep <- function(resp,parm,
     if(psi.crit < rel.diff.psi.eps)  maybe.converged <- TRUE
     if(abs(psi.max.diff) < abs.diff.psi.eps)  maybe.converged <- TRUE
 
-    if(diff.Q.psi<0){
+    sample.size.new <- latent.data$sample.size
+
+    if(diff.Q.psi<0 && diffQsign){
 
       cat("\nCannot improve Q-function, stepping back")
       parm <- last.parm
       psi <- last.psi
       maybe.converged <- TRUE
     }
-    else if(!diffQsign) {
+
+    if(!diffQsign) {
 
       parm <- last.parm
       cat("\nSample size increase from",latent.data$sample.size)
-      latent.data$sample.size <- ceiling(latent.data$sample.size*1.5)
-      cat(" to",latent.data$sample.size)
+      sample.size.new <- ceiling(latent.data$sample.size*1.5)
+      cat(" to",sample.size.new)
       maybe.converged <- FALSE
+
+    } else if(maybe.converged){
+
+      if(latent.data$sample.size >= min.final.size)
+          converged<-TRUE
+      else{
+
+        cat("\nMCEM algorithm may have converged, setting sample size to",min.final.size,"to be sure")
+        latent.data$sample.size <- min.final.size
+      }
     }
+    else{
+
+      sample.size.new <- ceiling(sample.size.start*
+                                (2*qnorm(1-abs(diff.Q.alpha))/zval.diff.Q.psi)^2
+                              )
+    }
+    if(sample.size.new > max.size){
+      cat("\nMaximum sample size reached")
+      sample.size.new <- max.size
+      }
+
+    if(sample.size.new > latent.data$sample.size){
+      cat("\nNew sample size",sample.size.new)
+      latent.data$sample.size <- sample.size.new
+      }
+
 
     ## First find the maximum of the integrand - for
     ## optimal importance sampling
@@ -191,31 +220,6 @@ latpos.MCEMstep <- function(resp,parm,
     plot.trace(plot.ii,trace$Q[plot.ii,,drop=FALSE],trace$psi[plot.ii,,drop=FALSE])
   }
 
-  if(maybe.converged){
-
-    if(latent.data$sample.size >= min.final.size)
-        converged<-TRUE
-    else{
-
-      cat("\nMCEM algorithm may have converged, setting sample size to",min.final.size,"to be sure")
-      latent.data$sample.size <- min.final.size
-    }
-  }
-  else{
-
-    sample.size.new <- ceiling(sample.size.start*
-                              (2*qnorm(1-abs(diff.Q.alpha))/zval.diff.Q.psi)^2
-                            )
-    if(sample.size.new > max.size){
-      cat("\nMaximum sample size reached")
-      sample.size.new <- max.size
-      }
-
-    if(sample.size.new > latent.data$sample.size){
-      cat("\nNew sample size",sample.size.new)
-      latent.data$sample.size <- sample.size.new
-      }
-  }
 
   if(converged){
 

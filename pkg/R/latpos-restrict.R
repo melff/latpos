@@ -1,4 +1,4 @@
-rotate.to.restriction <- function(X,C,d,maxiter=100,eps=1e-7,verbose=TRUE){
+rotate.to.restriction <- function(X,C,d,maxiter=100,eps=1e-7,verbose=FALSE){
 
   restr <- restrictor(C=C,d=d)
   k <- restr$offset
@@ -84,4 +84,34 @@ standard.restrictions <- function(A){
   C <- rbind(C.tri,C.sum)
 
   list(C=C,d=numeric(nrow(C)))
+}
+
+set.parms.free <- function(...){
+
+  pat <- list(...)
+
+  function(A) set.parms.free2(pat,A)
+}
+
+set.parms.free2 <- function(pat,A){
+
+  Apat <- array(1,dim=dim(A),dimnames=dimnames(A))
+
+  for(i in seq_along(pat)){
+    latent.dim <- names(pat)[i]
+    free.indicators <- as.character(pat[[i]])
+    if(!all(free.indicators %in% rownames(Apat))) stop("undefined indicator")
+    Arows <- na.omit(match(free.indicators,rownames(Apat)))
+    Acol <- match(latent.dim,colnames(Apat))
+    if(!length(Acol)) stop("undefined latent dimension")
+    if(length(Arows) && length(Acol)){
+      Apat[Arows,Acol] <- 0
+      }
+  }
+
+  C <- diag(x=as.vector(Apat),nrow=length(as.vector(Apat)))
+  use <- diag(C)>0
+  C <- C[use,,drop=FALSE]
+  d <- numeric(nrow(C))
+  list(C=C,d=d)
 }
