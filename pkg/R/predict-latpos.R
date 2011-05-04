@@ -36,12 +36,6 @@ latpos.impute <- function(resp,parm,sampler,sample.size){
 
     kept <- 0
 
-    #ll.max.j <- latpos.eval.parms(y=y.j,n=n.j,j=j.j,t=t.j,parm=parm,U=Utilde.j,
-    #                compute=c("logLik.j"))[["logLik.j"]]
-    #ll.max.j <- sum(ll.max.j)
-    #log.f.U.tilde <- sum(sampler$log.density(Utilde.j))
-    #thresh.j <- exp(ll.max.j - log.f.U.tilde + logdet(iK2.j))
-
     thresh.j <- 0
     repeat{
 

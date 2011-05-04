@@ -160,12 +160,14 @@ simul.U.imp <- function(y,n,j,t,parm,Utilde,iK2,size,sampler){
   dim(n) <- dim(y)
   j <- rep(1:size,each=Tj)
   t <- rep(t,size)
+  repl <- rep(1,length(j))
 
   dimU <- dim(U)
   dim(U) <- c(prod(dimU[1:2]),dimU[3])
 
   ll <- latpos.eval.parms(y=y,n=n,j=j,t=t,parm=parm,U=U,
-                    compute=c("logLik.j"))
+                    replications=repl,
+                    compute=c("logLik.j")) # Each replication is a "group"
   ll <- ll$logLik.j
 
   dim(U) <- dimU

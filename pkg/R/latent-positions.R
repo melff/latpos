@@ -57,7 +57,6 @@ latpos <- function(formula,data,subset,id,time,
   fit$orig.order <- orig.order
   fit$start <- start
 
-  fit$parm$covmat <- vcov.latpos(fit)
   structure(fit,
     class="latpos"
   )
@@ -216,6 +215,7 @@ latpos.control <- function(maxiter=200,
                             max.size=Inf,
                             min.final.size=1000,
                             sparsity.eps=0,
+                            force.increase=FALSE,
                             ll.linesearch=FALSE,
                             Q.linesearch=FALSE,
                             ...){
@@ -230,6 +230,7 @@ latpos.control <- function(maxiter=200,
     max.size=max.size,
     min.final.size=min.final.size,
     sparsity.eps=sparsity.eps,
+    force.increase=force.increase,
     ll.linesearch=ll.linesearch,
     Q.linesearch=Q.linesearch
     )
@@ -424,9 +425,6 @@ latpos.fit <- function(resp,start,
   ll.linesearch <- control$ll.linesearch
   Q.linesearch  <- control$Q.linesearch
 
-  EM.maxiter <- control$EM.maxiter
-  NR.threshold <- control$NR.threshold
-  
 
   stopifnot(ncol(start$A)==ncol(start$U))
 
@@ -486,20 +484,27 @@ latpos.fit <- function(resp,start,
     latent.data <- step.res$latent.data
     trace <- step.res$trace
     converged <- step.res$converged
-
+    cat(paste("\n",format(Sys.time(),usetz=TRUE),"\n",sep=""))
     if(converged) break
 
   }
+  parm$zeta <- 1/parm$tau
 
   GradInfo.Abeta <- latpos.GradInfo_Abeta(resp=resp,parm=parm,latent.data=latent.data)
   GradInfo.VarPar <- latpos.GradInfo_VarPar(resp=resp,parm=parm,latent.data=latent.data)
 
-  Info <- as.matrix(bdiag(GradInfo.Abeta$Information,GradInfo.VarPar$Information))
-  covmat <- solve(Info)
-  Qmat <- as.matrix(bdiag(GradInfo.Abeta$restrictor,GradInfo.VarPar$restrictor))
-  
-  covmat <- Qmat %*% tcrossprod(covmat,Qmat)
-  parm$covmat <- covmat
+  parm$Information <- list(Abeta=GradInfo.Abeta$Information,
+                           VarPar=GradInfo.VarPar$Information)
+
+  parm$Info.cpl <- list(Abeta=GradInfo.Abeta$Info.cpl,
+                        VarPar=GradInfo.VarPar$Info.cpl)
+
+  parm$Info.miss <- list(Abeta=GradInfo.Abeta$Info.miss,
+                        VarPar=GradInfo.VarPar$Info.miss)
+
+  parm$Info.restr <- list(Abeta=GradInfo.Abeta$restrictor,
+                        VarPar=GradInfo.VarPar$restrictor)
+
 
   list(
     resp=resp,parm=parm,
@@ -544,7 +549,7 @@ symmFill <- function(D,fill){
 
 print.latpos <- function(x,...){
 
-  cat("\nSpatial model of latent positions")
+  cat("\nSpatial model of latent positions\n")
 
   print.default(x$call)
 
@@ -563,4 +568,4 @@ print.latpos <- function(x,...){
 }
 
 
-vcov.latpos <- function(object,...) return(object$parm$covmat)
+

@@ -39,15 +39,20 @@ latpos.GradInfo_Abeta <- function(resp,parm,latent.data){
   list(
     gradient=as.vector(gradient),
     Information=as.matrix(Info),
-    var.gradient=var.g,
+    Info.cpl=as.matrix(XWX),
+    Info.miss=as.matrix(Info.miss),
+    var.gradient=as.matrix(var.g),
     restrictor=as.matrix(Qmat)
     )
 }
 
 
-AbetaRes.j <- function(R,w){
+AbetaRes.j <- function(R,w,repl){
 
   wR <- w*R
+  R <- rowsum(R,repl)
+  wR <- rowsum(wR,repl)
+  w <- tapply(w,repl,"[",i=1)
   RR <- crossprod(R,wR)
   wRwR <- crossprod(wR)
   wwR <- drop(crossprod(w,wR))

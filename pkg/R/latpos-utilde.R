@@ -20,8 +20,11 @@ latpos.utilde <- function(resp,parm,maxiter=100,verbose=FALSE){
   if(is.list(U))
     U <- U$U
   vecU <- as.vector(t(U))
+  
+  repl <- rep(1,length(y))
 
   res <- latpos.eval.parms(y=y,n=resp$n,j=resp$j,t=t,parm=parm,U=U,
+                replications=repl,
                 compute=c("deviance","p"))
   p <- res$p
   dev <- res$deviance
@@ -50,6 +53,7 @@ latpos.utilde <- function(resp,parm,maxiter=100,verbose=FALSE){
     U <- t(structure(vecU,dim=c(D,J)))
 
     res <- latpos.eval.parms(y=y,n=resp$n,j=resp$j,t=t,parm=parm,U=U,
+                replications=repl,
                 compute=c("deviance","p"))
     p <- res$p
     dev <- res$deviance
@@ -61,6 +65,7 @@ latpos.utilde <- function(resp,parm,maxiter=100,verbose=FALSE){
 
         U[trouble,] <- last.U[trouble,]
         res <- latpos.eval.parms(y=y,n=resp$n,j=resp$j,t=t,parm=parm,U=U,
+                      replications=repl,
                       compute=c("deviance","p"))
         p <- res$p
         dev <- res$deviance
@@ -72,6 +77,7 @@ latpos.utilde <- function(resp,parm,maxiter=100,verbose=FALSE){
 
         U <- (U + last.U)/2
         res <- latpos.eval.parms(y=y,n=resp$n,j=resp$j,t=t,parm=parm,U=U,
+                      replications=repl,
                       compute=c("deviance","p"))
         p <- res$p
         dev <- res$deviance
@@ -93,7 +99,8 @@ latpos.utilde <- function(resp,parm,maxiter=100,verbose=FALSE){
       if(verbose) cat("\nCannot decrease deviance, backing up\n")
       U <- last.U
       res <- latpos.eval.parms(y=y,n=resp$n,j=resp$j,t=t,parm=parm,U=U,
-                    compute=c("deviance","p"))
+                              replications=repl,
+                              compute=c("deviance","p"))
       p <- res$p
       dev <- res$deviance
       p <- as.vector(p)

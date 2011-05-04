@@ -149,7 +149,8 @@ latpos.VarParMstep <- function(resp,parm,latent.data,maxiter){
         #cat(" ll =",ll)
         -ll
     }
-    opt.res <- nlminb(start=par,objective=searchFun,grad=NULL,lower=lower.par,upper=upper.par)
+    cat("\n")
+    opt.res <- nlminb(start=par,objective=searchFun,grad=NULL,lower=lower.par,upper=upper.par,control=list(trace=10))
     ll <- -opt.res$objective
     par <- opt.res$par
     if(l.rho)

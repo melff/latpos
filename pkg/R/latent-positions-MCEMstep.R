@@ -15,8 +15,10 @@ latpos.MCEMstep <- function(resp,parm,
   max.size          <- control$max.size
   min.final.size    <- control$min.final.size
   sparsity.eps      <- control$sparsity.eps
+  force.increase    <- control$force.increase
   ll.linesearch <- control$ll.linesearch
   Q.linesearch  <- control$Q.linesearch
+  
 
   last.parm <- parm
 
@@ -36,10 +38,12 @@ latpos.MCEMstep <- function(resp,parm,
 
   diffQsign <- FALSE
   converged <- FALSE
+  maybe.converged <- FALSE
   used.sample.size <- latent.data$sample.size
+  last.sample.size <- used.sample.size
 
   cat("\n\n**** Monte Carlo EM Iteration",iter,"****")
-  while(!diffQsign && !converged) {
+  while(!diffQsign && !converged && !maybe.converged) {
 
     used.sample.size <- latent.data$sample.size
     maybe.converged <- FALSE
@@ -73,13 +77,13 @@ latpos.MCEMstep <- function(resp,parm,
     max.diff.id <- which(abs(diff.psi)==psi.max.diff)[1]
     psi.crit <- max(abs(psi-last.psi)/(.0001+last.psi))
 
-    if(Q.linesearch &&
+    if(force.increase &&
+      Q.linesearch &&
       abs(zval.diff.Q.psi) > qnorm(1-diff.Q.alpha) &&
       crit.diff.Q.psi > diff.Q.eps &&
       psi.crit > rel.diff.psi.eps &&
       abs(psi.max.diff) > abs.diff.psi.eps &&
-      diff.Q.psi < 0 &&
-      sample.size.start == latent.data$sample.size ){
+      diff.Q.psi < 0){
 
       cat(" -- need to conduct line search")
 
@@ -103,6 +107,12 @@ latpos.MCEMstep <- function(resp,parm,
 
       opt.res <- optimise(searchFun,interval=c(0,1))
       parm <- attr(opt.res$objective,"parm")
+      psi <- parm$phi
+      if(parm$free.beta) psi <- c(psi,parm$beta)
+      if(parm$free.Sigma!="none") psi <- c(psi,vech(parm$Sigma))
+      if(parm$free.rho) psi <- c(psi,parm$rho)
+      psi <- c(psi,1/parm$tau)
+
       Lambda.Q.res <- attr(opt.res$objective,"Lambda.Q.res")
       Q.psi <- Lambda.Q.res$Q
       diff.Q.psi <- Lambda.Q.res$diff.Q
@@ -129,9 +139,8 @@ latpos.MCEMstep <- function(resp,parm,
     if(psi.crit < rel.diff.psi.eps)  maybe.converged <- TRUE
     if(abs(psi.max.diff) < abs.diff.psi.eps)  maybe.converged <- TRUE
 
-    sample.size.new <- latent.data$sample.size
 
-    if(diff.Q.psi<0 && diffQsign){
+    if(force.increase && diff.Q.psi<0 && diffQsign){
 
       cat("\nCannot improve Q-function, stepping back")
       parm <- last.parm
@@ -139,7 +148,10 @@ latpos.MCEMstep <- function(resp,parm,
       maybe.converged <- TRUE
     }
 
-    if(!diffQsign) {
+    last.sample.size <- used.sample.size
+    sample.size.new <- latent.data$sample.size
+
+    if(!diffQsign && latent.data$sample.size < max.size) {
 
       parm <- last.parm
       cat("\nSample size increase from",latent.data$sample.size)
@@ -163,15 +175,18 @@ latpos.MCEMstep <- function(resp,parm,
                                 (2*qnorm(1-abs(diff.Q.alpha))/zval.diff.Q.psi)^2
                               )
     }
-    if(sample.size.new > max.size){
-      cat("\nMaximum sample size reached")
-      sample.size.new <- max.size
-      }
 
     if(sample.size.new > latent.data$sample.size){
+
+      if(sample.size.new > max.size){
+        cat("\nMaximum sample size reached")
+        sample.size.new <- max.size
+        }
+
       cat("\nNew sample size",sample.size.new)
       latent.data$sample.size <- sample.size.new
-      }
+    }
+
 
 
     ## First find the maximum of the integrand - for
@@ -183,10 +198,9 @@ latpos.MCEMstep <- function(resp,parm,
     ## The Monte-Carlo E-step: Simulating from
     ## the posterior distribution of the latent data
 
-    gc();gc()
     latent.data <- latpos.simul(resp=resp,parm=parm,
-                           latent.data=latent.data,
-                           sampler=sampler)
+                          latent.data=latent.data,
+                          sampler=sampler)
     sample.size <- latent.data$sample.size
     parm$logLik <- logLik <- sum(latent.data$ll.j)
 
@@ -194,9 +208,29 @@ latpos.MCEMstep <- function(resp,parm,
     crit.logLik <- abs(diff.logLik)/abs(last.logLik)
 
     cat("\nCurrent log-likelihood:",logLik)
-    cat(" - increase:",diff.logLik)
-    cat(" - relative increase:",crit.logLik*sign(diff.logLik))
 
+    if(diff.logLik >= 0 || latent.data$sample.size > last.sample.size){
+
+      cat(" - increase:",diff.logLik)
+      cat(" - relative increase:",crit.logLik*sign(diff.logLik))
+
+    }
+    else {
+
+      cat(" - would be a decrease:",diff.logLik)
+      cat(" stepping back")
+
+      parm <- last.parm
+      converged<-TRUE
+      Utilde <- latpos.utilde(resp=resp,parm=parm,maxiter=maxiter,verbose=FALSE)
+      parm$Utilde <- Utilde
+      latent.data <- latpos.simul(resp=resp,parm=parm,
+                            latent.data=latent.data,
+                            sampler=sampler)
+      sample.size <- latent.data$sample.size
+      parm$logLik <- logLik <- sum(latent.data$ll.j)
+      
+    }
     
   }
 
@@ -289,11 +323,14 @@ latpos.Lambda.Q <- function(resp,latent.data,parm,last.parm){
         U <- array(U.sim[,kk,,drop=FALSE],c(JTK,D))
         w.kk <- w.sim[,kk,drop=FALSE]
         w <- w.kk[j.,]
+        repl <- rep(kk,each=JT)
         res <- latpos.eval.parms(y=y,n=n,j=j,t=t,
                                 parm=parm,U=U,weights=w,
+                                replications=repl,
                                 compute="logLik.j")
         last.res <- latpos.eval.parms(y=y,n=n,j=j,t=t,
                                 parm=last.parm,U=U,weights=w,
+                                replications=repl,
                                 compute="logLik.j")
 
         Q <- Q + sum(res$logLik.j)
@@ -319,11 +356,14 @@ latpos.Lambda.Q <- function(resp,latent.data,parm,last.parm){
         U <- array(U.sim[,kk,,drop=FALSE],c(JT*r,D))
         w.kk <- w.sim[,kk,drop=FALSE]
         w <- w.kk[j.,]
+        repl <- rep(kk,each=JT)
         res <- latpos.eval.parms(y=y,n=n,j=j,t=t,
                                 parm=parm,U=U,weights=w,
+                                replications=repl,
                                 compute="logLik.j")
         last.res <- latpos.eval.parms(y=y,n=n,j=j,t=t,
                                 parm=last.parm,U=U,weights=w,
+                                replications=repl,
                                 compute="logLik.j")
 
         Q <- Q + sum(res$logLik.j)

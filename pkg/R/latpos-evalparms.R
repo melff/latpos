@@ -1,4 +1,4 @@
-latpos.eval.parms <- function(y,n,j,t,parm,U,compute,weights){
+latpos.eval.parms <- function(y,n,j,t,parm,U,replications,compute,weights){
 
   ndim <- length(parm$latent.dims)
   #nmiss.weights <- !missing(weights)
@@ -101,12 +101,14 @@ latpos.eval.parms <- function(y,n,j,t,parm,U,compute,weights){
     y <- as.vector(y)
     n <- as.vector(n)
     w <- as.vector(rep(weights,each=I))
-    j <- rep(j,each=nrow(A))
+    j <- rep(j,each=I)
+    repl <- rep(replications,each=I)
     R <- X*n*(y-p)
     resid.j <- lapply(split(1:nrow(R),j),function(jj){
                     R.j <- R[jj,,drop=FALSE]
                     w.j <- w[jj]
-                    AbetaRes.j(R.j,w.j)
+                    rep.j <- repl[jj]
+                    AbetaRes.j(R.j,w.j,rep.j)
                   })
 
     res$g.j <- sapply(resid.j,"[[",i="R")
@@ -165,8 +167,10 @@ latpos.integ.ll <- function(resp,parm,latent.data,compute){
 
         U <- array(U.sim[,kk,,drop=FALSE],c(JTK,D))
         w <- w.sim[j.,kk,drop=FALSE]
+        repl <- rep(kk,each=JT)
         res <- latpos.eval.parms(y=y,n=n,j=j,t=t,
                             parm=parm,U=U,weights=w,
+                            replications=repl,
                             compute=compute)
         dev <- dev + res$deviance
         if(compute.XWX)
@@ -194,8 +198,10 @@ latpos.integ.ll <- function(resp,parm,latent.data,compute){
 
       U <- array(U.sim[,kk,,drop=FALSE],c(JT*r,D))
       w <- w.sim[j.,kk,drop=FALSE]
+      repl <- rep(kk,each=JT)
       res <- latpos.eval.parms(y=y,n=n,j=j,t=t,
                           parm=parm,U=U,weights=w,
+                          replications=repl,
                           compute=compute)
       dev <- dev + res$deviance
       if(compute.XWX)

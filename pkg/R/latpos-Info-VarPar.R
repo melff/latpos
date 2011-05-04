@@ -202,15 +202,18 @@ latpos.GradInfo_VarPar <- function(resp,parm,latent.data){
   Tj1 <- parm$Tj1
   D <- ncol(Sigma)
 
+  sum.Tj1 <- sum(Tj1)
+  sum.Tj <- sum(Tj)
+
   Theta.x.Theta <- Theta %x% Theta
   d.theta.d.sigma <- -Theta.x.Theta
   d.tau.d.zeta <- -tau^2
   
-  Info.cpl.Theta <- sum(Tj1)/2*(Sigma %x% Sigma)
-  Info.cpl.Sigma <- sum(Tj1)/2*Theta.x.Theta
+  Info.cpl.Theta <- sum.Tj1/2*(Sigma %x% Sigma)
+  Info.cpl.Sigma <- sum.Tj1/2*Theta.x.Theta
 
-  Info.cpl.tau <- D*sum(Tj)/2*zeta^2
-  Info.cpl.zeta <- D*sum(Tj)/2*tau^2
+  Info.cpl.tau <- D*sum.Tj/2*zeta^2
+  Info.cpl.zeta <- D*sum.Tj/2*tau^2
 
   resids <- VarParResids(resp=resp,parm=parm,latent.data=latent.data)
 
@@ -220,20 +223,20 @@ latpos.GradInfo_VarPar <- function(resp,parm,latent.data){
   S1 <- sapply(resids,"[[", i="S1")
   S1 <- if(is.matrix(S1))rowSums(S1) else sum(S1)
 
-  S2 <- sapply(resids,"[[", i="S2")
-  S2 <- if(is.matrix(S2))rowSums(S2) else sum(S2)
+  #S2 <- sapply(resids,"[[", i="S2")
+  #S2 <- if(is.matrix(S2))rowSums(S2) else sum(S2)
 
-  V <- sapply(resids,"[[", i="V")
-  V <- if(is.matrix(V))rowSums(V) else sum(V)
+  #V <- sapply(resids,"[[", i="V")
+  #V <- if(is.matrix(V))rowSums(V) else sum(V)
 
   var.R <- Sapply(resids,"[[", i="var.R")
   
-  S2rhoS1 <- S2-rho*S1
+  #S2rhoS1 <- S2-rho*S1
 
-  Info.cpl.rho <- crossprod(S1,as.vector(Theta))
-  Info.cpl.Theta.rho <- tau/2 * as.vector(S2rhoS1)
-  Info.cpl.Theta.tau <- as.vector(V)/2
-  Info.cpl.rho.tau <- -sum(S2rhoS1*Theta)
+  Info.cpl.rho <- tau*crossprod(S1,as.vector(Theta))
+  Info.cpl.Theta.rho <- numeric(length=length(Theta))
+  Info.cpl.Theta.tau <- sum.Tj/2*zeta*as.vector(Sigma)
+  Info.cpl.rho.tau <- 0
 
   Info.cpl.Sigma.rho <- d.theta.d.sigma%*%Info.cpl.Theta.rho
   Info.cpl.Sigma.zeta <- d.theta.d.sigma%*%Info.cpl.Theta.tau*d.tau.d.zeta
@@ -271,13 +274,15 @@ latpos.GradInfo_VarPar <- function(resp,parm,latent.data){
   else
     Qmat <- bdiag(Q.sigma,1)
 
-  Info.obs <- crossprod(Qmat,Info.obs%*%Qmat)
+  #Info.obs <- crossprod(Qmat,Info.obs%*%Qmat)
   gradient <- crossprod(Qmat,gradient)
   var.gradient <- crossprod(Qmat,var.gradient%*%Qmat)
 
   list(
     gradient=as.vector(gradient),
     Information=as.matrix(Info.obs),
+    Info.cpl=as.matrix(Info.cpl),
+    Info.miss=as.matrix(Info.miss),
     var.gradient=as.matrix(var.gradient),
     restrictor=as.matrix(Qmat))
 }

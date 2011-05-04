@@ -112,6 +112,10 @@ set.parms.free2 <- function(pat,A){
   C <- diag(x=as.vector(Apat),nrow=length(as.vector(Apat)))
   use <- diag(C)>0
   C <- C[use,,drop=FALSE]
+
+  C.sum <- t(diag(nrow=ncol(A)) %x% rep(1,nrow(A)))
+  C <- rbind(C,C.sum)
+  
   d <- numeric(nrow(C))
   list(C=C,d=d)
 }
