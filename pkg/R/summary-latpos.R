@@ -401,3 +401,235 @@ print.summary.latpos <- function(x,...){
   
   invisible(x)
 }
+
+toLatex.summary.latpos <- function(x,...){
+
+  out <- "%Spatial model of latent positions\n%\n%"
+
+
+  A.tab <- x$tabs$A[,,1:2,drop=FALSE]
+  rown  <- dimnames(A.tab)[[1]]
+  dimn  <- dimnames(A.tab)[[2]]
+  statn <- dimnames(A.tab)[[3]]
+  tmp <- A.tab
+
+  ndim <- length(dimn)
+
+  for(i in 1:ndim){
+    A.tab[,i,1] <- formatEST(tmp[,i,1])
+    A.tab[,i,2] <- formatSE(tmp[,i,2])
+    A.tab[tmp[,i,2]==0,i,2] <- ""
+    A.tab[tmp[,i,1]==0 & tmp[,i,2]==0,i,1] <- ""
+    }
+  A.tab <- aperm(A.tab,c(1,3,2))
+
+  tmp <- array(A.tab,c(dim(A.tab)[1],prod(dim(A.tab)[2:3])))
+  tmp <- cbind(rown,tmp)
+  tmp <- rbind(c(#"",
+                  "Positions of objectives:",
+                  rep(
+                      paste("\\multicolumn{1}{c}{",statn,"}",sep=""),
+                      ndim)),
+               tmp)
+#
+  A.tab <- if(ndim>1) rbind(c("",as.vector(rbind(dimn,rep("",ndim)))),
+                            tmp)
+           else tmp
+  dimnames(A.tab) <- NULL
+
+  Sigma.tab <- x$tabs$Sigma
+  zSigma.tab <- x$tabs$zeta.Sigma
+
+  if(x$parm$free.Sigma=="full"){
+
+    tmp <- Sigma.tab
+    for(i in 1:ndim){
+      Sigma.tab[,i,1] <- formatEST(tmp[,i,1])
+      Sigma.tab[,i,2] <- formatSE(tmp[,i,2])
+      Sigma.tab[tmp[,i,2]==0,i,2] <- ""
+      Sigma.tab[tmp[,i,1]==0 & tmp[,i,2]==0,i,1] <- ""
+      }
+    Sigma.tab <- aperm(Sigma.tab,c(1,3,2))
+
+    Sigma.tab <- array(Sigma.tab,c(dim(Sigma.tab)[1],prod(dim(Sigma.tab)[2:3])))
+    Sigma.tab <- cbind(dimn,Sigma.tab)
+    Sigma.tab <- rbind(c("Between units",rep("",ndim*2)),Sigma.tab)
+
+    tmp <- zSigma.tab
+    for(i in 1:ndim){
+      zSigma.tab[,i,1] <- formatEST(tmp[,i,1])
+      zSigma.tab[,i,2] <- formatSE(tmp[,i,2])
+      zSigma.tab[tmp[,i,2]==0,i,2] <- ""
+      zSigma.tab[tmp[,i,1]==0 & tmp[,i,2]==0,i,1] <- ""
+      }
+    zSigma.tab <- aperm(zSigma.tab,c(1,3,2))
+
+    zSigma.tab <- array(zSigma.tab,c(dim(zSigma.tab)[1],prod(dim(zSigma.tab)[2:3])))
+    zSigma.tab <- cbind(dimn,zSigma.tab)
+    zSigma.tab <- rbind(c("Between timepoints",rep("",ndim*2)),zSigma.tab)
+
+    posPar.tab <- rbind(c("(Co-)Variance",rep("",ndim*2)),
+                        Sigma.tab,zSigma.tab)
+
+  }
+  else{
+
+    iii <- quick.grid(1:ndim,1:2)[,c(1,1,2)]
+
+    Sigma.tab <- Sigma.tab[iii]
+    zSigma.tab <- zSigma.tab[iii]
+    dim(Sigma.tab) <- c(ndim,2)
+    dim(zSigma.tab) <- c(ndim,2)
+
+    tmp <- Sigma.tab
+    for(i in 1:ndim){
+      Sigma.tab[i,1] <- formatEST(tmp[i,1])
+      Sigma.tab[i,2] <- formatSE(tmp[i,2])
+      }
+
+    tmp <- zSigma.tab
+    for(i in 1:ndim){
+      zSigma.tab[i,1] <- formatEST(tmp[i,1])
+      zSigma.tab[i,2] <- formatSE(tmp[i,2])
+      }
+
+    posPar.tab <- rbind(c("Variance",rep("",ndim*2)),
+                        c("Between units",t(Sigma.tab)),
+                        c("Between timepoints",t(zSigma.tab))
+                        )
+
+  }
+
+  if(x$parm$free.rho){
+
+    rho.tab <- x$tabs$rho[1:2]
+    tmp <- rho.tab
+    rho.tab[1] <- formatEST(tmp[1])
+    rho.tab[2] <- formatSE(tmp[2])
+    tmp <- t(rep(rho.tab,ndim))
+
+    rho.tab <- cbind("Autoregression slope",tmp)
+    dimnames(rho.tab) <- NULL
+
+    posPar.tab <- rbind(rho.tab,posPar.tab)
+  }
+
+
+  if(x$parm$free.beta){
+
+    beta.tab <- x$tabs$beta[,1:2]
+    tmp <- beta.tab
+    for(i in 1:ndim){
+      beta.tab[i,1] <- formatEST(tmp[i,1])
+      beta.tab[i,2] <- formatSE(tmp[i,2])
+      }
+    tmp <- t(as.matrix(as.vector(t(beta.tab))))
+
+    beta.tab <- cbind("Means",tmp)
+    dimnames(beta.tab) <- NULL
+
+    posPar.tab <- rbind(beta.tab,posPar.tab)
+  }
+
+  tmp <- rbind(c(#"",
+                  "Positions of manifestos:",
+                      rep(
+                      paste("\\multicolumn{1}{c}{",statn,"}",sep=""),
+                      ndim)),
+               posPar.tab)
+  posPar.tab <- tmp #if(ndim>1) rbind(c("",as.vector(rbind(dimn,rep("",ndim)))),
+                #                 tmp)
+                #else tmp
+  dimnames(posPar.tab) <- NULL
+
+
+  nrows.A.tab <- nrow(A.tab)
+  nrows.posPar.tab <- nrow(posPar.tab)
+
+  i.A.tab <- 1:nrows.A.tab
+  i.posPar.tab <- nrows.A.tab + 1:nrows.posPar.tab
+
+  tab <- rbind(A.tab,posPar.tab)
+  tab <- apply(tab,2,format,justify="right")
+  tab <- apply(tab,1,paste,collapse=" & ")
+
+  A.tab <- tab[i.A.tab]
+  posPar.tab <- tab[i.posPar.tab]
+
+  A.tab <- paste(A.tab,"\\\\",sep="")
+  A.tab <- if(ndim > 1) c(A.tab[1:2],"\\midrule",A.tab[-(1:2)])
+           else  c(A.tab[1],"\\midrule",A.tab[-1])
+
+  posPar.tab <- paste(posPar.tab,"\\\\",sep="")
+  posPar.tab <- if(ndim > 1) c(posPar.tab[1:2],"\\midrule",posPar.tab[-(1:2)])
+                else c(posPar.tab[1],"\\midrule",posPar.tab[-1])
+
+  nc <- 2*length(dimn)
+  nc1 <- nc+1
+
+  head <- paste("\\begin{tabular}{",paste(c("l",rep("D{.}{.}{-1}",nc)),collapse=""),"}",sep="")
+  tail <- paste("\\end{tabular}")
+
+  tab <- c(
+    head,
+    "\\toprule",
+    #paste("\\multicolumn{",nc,"}{l}{Positions of objectives:}",sep=""),
+    #"Positions of objectives:",
+    A.tab,
+    "\\midrule",
+    #paste("\\multicolumn{",nc,"}{l}{Positions of manifestos:}",sep=""),
+    #"Positions of manifestos:",
+    posPar.tab#,
+    #"\\bottomrule",
+    #tail
+    )
+
+  if(ndim>1)
+    for(dn in dimn){
+
+      pat <- paste(dn,"&")
+      subst <- paste("\\multicolumn{2}{c}{",dn,"}",sep="")
+      tab <- gsub(pat,subst,tab,fixed=TRUE)
+    }
+
+  out <- c(out,tab)
+
+  sumstats <- matrix(c(
+                    "Likelihood:",formatSumStat(x$parm$logLik),
+                    "Deviance:",formatSumStat(x$deviance)),
+                    byrow=TRUE,
+                    nrow=2,ncol=2)
+
+
+  totals <- matrix(c(
+                    "N. of units:",x$total.units,
+                    "N. of observations:",x$total.obs,
+                    "N. of counts:",x$total.counts
+                    ),byrow=TRUE,ncol=2)
+
+
+  summaries <- rbind(sumstats,totals)
+  summaries <- apply(summaries,2,format,justify="right")
+  summaries <- apply(summaries,1,paste,collapse=" & ")
+
+  sumstats <- summaries[1:2]
+  totals <- summaries[2+1:3]
+
+  summaries <- c(#"\\par",
+                 #"\\begin{tabular}{lD{.}{.}{1}}",
+                 #"\\toprule",
+                 "\\midrule",
+                 "\\multicolumn{2}{l}{Summary statistics:}\\\\",
+                 paste(sumstats,"\\\\",sep=""),
+                 "\\midrule",
+                 "\\multicolumn{2}{l}{Totals:}\\\\",
+                 paste(totals,"\\\\",sep=""),
+                 "\\bottomrule",
+                 "\\end{tabular}"
+                )
+
+  out <- c(out,summaries)
+
+  structure(out,class="Latex")
+}
+
