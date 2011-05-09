@@ -633,3 +633,22 @@ toLatex.summary.latpos <- function(x,...){
   structure(out,class="Latex")
 }
 
+relabel.summary.latpos <- function(x,...,gsub=FALSE,fixed=TRUE,warn=FALSE){
+
+  tabs <- x$tabs
+
+  tabs$A <- colrename(tabs$A,...,warn=warn)
+  tabs$A <- rowrename(tabs$A,...,warn=warn)
+
+  tabs$beta <- rowrename(tabs$beta,...,warn=warn)
+
+  tabs$Sigma <- colrename(tabs$Sigma,...,warn=warn)
+  tabs$Sigma <- rowrename(tabs$Sigma,...,warn=warn)
+
+  tabs$zeta.Sigma <- colrename(tabs$zeta.Sigma,...,warn=warn)
+  tabs$zeta.Sigma <- rowrename(tabs$zeta.Sigma,...,warn=warn)
+
+  x$tabs <- tabs
+
+  return(x)
+}

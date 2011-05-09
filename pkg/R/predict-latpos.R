@@ -36,26 +36,29 @@ latpos.impute <- function(resp,parm,sampler,sample.size){
 
     kept <- 0
 
-    thresh.j <- 0
+    log.thresh.j <- 0
+    cat("\nUnit",jj,"\n")
     repeat{
 
-        Utmp <- simul.U.imp(y=y.j,n=n.j,j=j.j,t=t.j,parm=parm,
+        sim.tmp <- simul.U.imp(y=y.j,n=n.j,j=j.j,t=t.j,parm=parm,
                             Utilde=Utilde.j,
                             iK2=iK2.j,
                             size=batch.size,
                             sampler=sampler)
-        w.tmp <- exp(Utmp$log.w)
-        ll.tmp <- Utmp$ll
-        Utmp <- Utmp$U
+        log.w.tmp <- sim.tmp$log.w
+        ll.tmp <- sim.tmp$ll.cpl
+        Utmp <- sim.tmp$U
 
-        if(thresh.j==0) thresh.j <- 1.5*max(w.tmp)
-        else if(max(w.tmp)>thresh.j){
+        if(log.thresh.j==0) log.thresh.j <- max(log.w.tmp)+1
+        else if(max(log.w.tmp)>log.thresh.j){
 
+          log.thresh.j <- max(log.w.tmp)+1
           kept <- 0
+          cat("  Restarting\n")
           next
         }
 
-        keep <- w.tmp > runif(n=batch.size,max=thresh.j)
+        keep <- log.w.tmp - log.thresh.j > log(runif(n=batch.size))
 
         Utmp <- Utmp[,keep,,drop=FALSE]
         ll.tmp <- ll.tmp[keep]
@@ -78,7 +81,7 @@ latpos.impute <- function(resp,parm,sampler,sample.size){
           ll.j[j.] <- ll.j[j.] + sum(ll.tmp)/sample.size
         }
         kept <- kept + n_keep
-        cat("\nKept",n_keep,"of",batch.size,"random vectors")
+        cat(" ",n_keep,"of",batch.size,"random vectors kept -",kept,"in total\n")
 
         if(kept>=sample.size) break
     }
@@ -93,7 +96,7 @@ latpos.impute <- function(resp,parm,sampler,sample.size){
 
 predict.latpos <- function(object, newdata = NULL, id=NULL, time=NULL,
                             type=c("posterior modes","posterior means","multiple imputation"),
-                            se.fit=FALSE, interval=c("none","normal","quantile"), level=0.95,
+                            se.fit=FALSE, interval=c("none","normal","percentile"), level=0.95,
                             sample.size = object$sample.size,
                             batch.size=object$sample.size,
                             sampler=mvnorm.sampler(),
@@ -153,6 +156,7 @@ predict.latpos <- function(object, newdata = NULL, id=NULL, time=NULL,
   }
   else {
 
+    orig.order <- object$orig.order
     resp <- object$resp
     if(!is.list(parm$Utilde))
       parm$Utilde <- latpos.utilde(resp=resp,parm=parm,maxiter=maxiter)
@@ -193,8 +197,8 @@ predict.latpos <- function(object, newdata = NULL, id=NULL, time=NULL,
       colnames(se.B) <- latent.dims
     }
 
-    if(!(se.fit || interval !="none")) return(B)
-    else if(se.fit) return(list(fit=B,se.fit=se.B))
+    if(!(se.fit || interval !="none")) return(B[orig.order,])
+    else if(se.fit) return(list(fit=B[orig.order,],se.fit=se.B[orig.order,]))
     else {
 
       res <- array(B,c(dim(B),3))
@@ -202,9 +206,8 @@ predict.latpos <- function(object, newdata = NULL, id=NULL, time=NULL,
       zval <- qnorm((1 - level)/2)
       res[,,2] <- B + zval*se.B
       res[,,3] <- B - zval*se.B
-      dimnames(res)[[2]] <- latent.dims
-      dimnames(res)[[3]] <- c("fit","lwr","upr")
-      return(res)
+      dimnames(res) <- list(dimnames(B)[[1]],latent.dims,c("fit","lwr","upr"))
+      return(res[orig.order,,])
     }
   }
   else {
@@ -215,7 +218,7 @@ predict.latpos <- function(object, newdata = NULL, id=NULL, time=NULL,
     if(type=="multiple imputation"){
 
       B <- beta + aperm(Usim,c(3,1,2))
-      return(aperm(B,c(2,1,3)))
+      return(aperm(B,c(2,1,3))[orig.order,,])
     }
     else{ # type=="posterior means"
 
@@ -231,7 +234,7 @@ predict.latpos <- function(object, newdata = NULL, id=NULL, time=NULL,
       }
       if(se.fit){
 
-        return(list(fit=B,se.fit=se.B))
+        return(list(fit=B[orig.order,],se.fit=se.B[orig.order,]))
       }
       if(interval=="normal") {
 
@@ -240,9 +243,8 @@ predict.latpos <- function(object, newdata = NULL, id=NULL, time=NULL,
         zval <- qnorm((1 - level)/2)
         res[,,2] <- B + zval*se.B
         res[,,3] <- B - zval*se.B
-        dimnames(res)[[2]] <- latent.dims
-        dimnames(res)[[3]] <- c("fit","lwr","upr")
-        return(res)
+        dimnames(res) <- list(dimnames(B)[[1]],latent.dims,c("fit","lwr","upr"))
+        return(res[orig.order,,])
       }
       else if(interval == "percentile"){
 
@@ -251,11 +253,10 @@ predict.latpos <- function(object, newdata = NULL, id=NULL, time=NULL,
         prob <- c(prob,1-prob)
         B.lowup <- aperm(beta+aperm(apply(Usim,c(2,3),quantile,probs=prob),c(2,1,3)),c(3,1,2))
         res[,,2:3] <- B.lowup
-        dimnames(res)[[2]] <- latent.dims
-        dimnames(res)[[3]] <- c("fit","lwr","upr")
-        return(res)
+        dimnames(res) <- list(dimnames(B)[[1]],latent.dims,c("fit","lwr","upr"))
+        return(res[orig.order,,])
       }
-      return(B)
+      return(B[orig.order,])
     }
   }
 }
