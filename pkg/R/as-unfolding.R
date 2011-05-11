@@ -29,6 +29,9 @@ as.unfolding.latpos <- function(object,
     }
     else stop("prediction has too many dimensions")
   }
+  else {
+     B <- as.matrix(prediction)
+  }
 
   res <- structure(list(
     A=object$parm$A,

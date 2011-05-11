@@ -7,6 +7,7 @@ latpos <- function(formula,data,subset,id,time,
   latent.dims <- all.vars(formula[c(1,3)])
   formula <- formula[1:2]
   formula <- update(formula,~.-1)
+  manifest <- all.vars(formula)
   cl <- match.call()
   m <- match.call(expand.dots=FALSE)
   mf <- m[c(1,match(c("formula","data","subset"),
@@ -39,12 +40,28 @@ latpos <- function(formula,data,subset,id,time,
   resp$s0 <- ifelse(t==0,0,s-1)
   resp$s1 <- ifelse(t==0,0,s)
 
-  if(!length(start)) start <- latpos.start.default(I=nrow(y),D=length(latent.dims),
+
+  if(length(start)){
+    if(!is.list(start)) stop("'start' argument must be a list")
+
+    start <- start[c("A","beta","Sigma","rho","zeta")]
+    sdf.args <- c(
+                  list(
+                    latent=latent.dims,manifest=manifest
+                  ),
+                  start,
+                  list(...)
+                )
+    start <- do.call(latpos.start.default,sdf.args)
+  }
+
+  if(!length(start)) start <- latpos.start.default(latent=latent.dims,manifest=manifest,
                                                                               ...)
 
   start <- start[nzchar(names(start)) & !is.na(names(start))]
   
-  start <- latpos.start(resp=resp,latent.dims=latent.dims,start=start,
+  start <- latpos.start(resp=resp,latent.dims=latent.dims,manifest=manifest,
+                        start=start,
                         unfold.method=unfold.method,...)
   
   fit <- latpos.fit(resp=resp,
@@ -63,7 +80,7 @@ latpos <- function(formula,data,subset,id,time,
 }
 
 
-latpos.start.default <- function(I,D,
+latpos.start.default <- function(latent,manifest,
                                  free.beta=FALSE,
                                  free.Sigma=c("diagonal","scale","full","none"),
                                  free.rho=FALSE,
@@ -76,12 +93,39 @@ latpos.start.default <- function(I,D,
                                  ...
                                  ){
 
+  D <- length(latent)
+  I <- length(manifest)
+
   free.Sigma <- match.arg(free.Sigma)
   start <- list(
       free.beta=free.beta,
       free.Sigma=free.Sigma,
       free.rho=free.rho
     )
+
+  if(!missing(A)){
+
+    if(is.matrix(A)){
+
+      if(nrow(A)==I && ncol(A)==D)
+        start$A <- A
+      else {
+        start$A <- matrix(0,I,D,dimnames=list(manifest,latent))
+        start$A[rownames(A),colnames(A)] <- A
+      }
+    }
+    else if(is.list(A)){
+        start$A <- matrix(0,I,D,dimnames=list(manifest,latent))
+
+        for(l in names(A)){
+          A.l <- A[[l]]
+          start$A[names(A.l),l] <- A.l
+        }
+    }
+    else {
+      stop("unsported type of starting values for A")
+    }
+  }
 
   if(!missing(beta))
     start$beta <- beta
@@ -236,20 +280,26 @@ latpos.control <- function(maxiter=200,
     )
 }
 
-latpos.start <- function(resp,latent.dims,start,unfold.method,restrictions=standard.restrictions,...){
+latpos.start <- function(resp,latent.dims,manifest,start,unfold.method,restrictions=standard.restrictions,...){
 
-  I <- nrow(resp$y)
+  I <- length(manifest)
   D <- length(latent.dims)
 
   y <- resp$y*resp$n
   start.diffs <- sqrt(-log(sweep(y+.5,2,colSums(y+.5),"/")))
   uf <- unfold(start.diffs,ndims=length(latent.dims),method=unfold.method,squared=TRUE)
-  if("A" %in% names(start))
+  if("A" %in% names(start)){
       A <- start$A
-  else
+      trans <- ProcrustesTrans(uf$B,A,translate=TRUE)
+      A. <- sweep(uf$B%*%trans$A,2,trans$b,"-")
+      B <- sweep(uf$A%*%trans$A,2,trans$b,"-")
+  }
+  else {
       A <- uf$B
-  B <- uf$A
+      B <- uf$A
+  }
   colnames(A) <- latent.dims
+  rownames(A) <- manifest
   colnames(B) <- latent.dims
 
   D <- ncol(A)
@@ -458,6 +508,8 @@ latpos.fit <- function(resp,start,
 
   parm <- start
 
+  print(parm$A)
+
   ### The Iterations ###################
   cat("\n\n\n****** Starting Monte Carlo EM algorithm ******")
   cat("\nGenerating Monte Carlo sample(s) - size",initial.size,"- for the first step")
@@ -485,6 +537,7 @@ latpos.fit <- function(resp,start,
     trace <- step.res$trace
     converged <- step.res$converged
     cat(paste("\n",format(Sys.time(),usetz=TRUE),"\n",sep=""))
+    print(parm$A)
     if(converged) break
 
   }
