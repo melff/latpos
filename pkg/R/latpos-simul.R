@@ -18,8 +18,8 @@ latpos.simul <- function(resp,parm,latent.data,sampler){
     last.size <- dim(latent.data$U.sim)[2]
     if(sample.size>last.size){
 
-      U.sim <- ff(0,dim=c(JT,sample.size,ndim))
-      w.sim <- ff(0,dim=c(J,sample.size))
+      U.sim <- array(0,dim=c(JT,sample.size,ndim))
+      w.sim <- array(0,dim=c(J,sample.size))
     }
     else{
 
@@ -29,8 +29,8 @@ latpos.simul <- function(resp,parm,latent.data,sampler){
   }
   else {
 
-    U.sim <- ff(0,dim=c(JT,sample.size,ndim))
-    w.sim <- ff(0,dim=c(J,sample.size))
+    U.sim <- array(0,dim=c(JT,sample.size,ndim))
+    w.sim <- array(0,dim=c(J,sample.size))
   }
 
   jD <- rep(j,each=ndim)

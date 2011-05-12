@@ -1,1 +1,7 @@
 *~
+/src/eta_derivs.o
+/src/latpos_p.o
+/src/latpos_resid.o
+/src/latpos_XWX.o
+/src/ll_p.o
+/src/manifestos.so

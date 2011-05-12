@@ -12,7 +12,7 @@ latpos.impute <- function(resp,parm,sampler,sample.size){
   sample.size <- 2*(sample.size%/%2+sample.size%%2)
   chunk.size <- getOption("latpos.chunk.size")
 
-  U.sim <- ff(0,dim=c(JT,sample.size,ndim))
+  U.sim <- array(0,dim=c(JT,sample.size,ndim))
 
   jD <- rep(j,each=ndim)
   ll.j <- numeric(J)
@@ -213,7 +213,7 @@ predict.latpos <- function(object, newdata = NULL, id=NULL, time=NULL,
   else {
 
     Usim <- latpos.impute(resp=resp,parm=parm,sampler=sampler,sample.size)
-    Usim <- as.ram(Usim$U.sim)
+    Usim <- Usim$U.sim
 
     if(type=="multiple imputation"){
 

@@ -1,4 +1,13 @@
 
+latpos_p <- function(A,B) .Call("latpos_p",A,B)
+ll_p <- function(p,y,n,weights) .Call("ll_p",p,y,n,weights)
+latpos_resid <- function(p,y,n,weights) .Call("latpos_resid",p,y,n,weights)
+
+d.eta.d.phibeta <- function(A,B,Q) .Call("d_eta_d_phibeta",A,B,Q)
+d.eta.d.phi <- function(A,B,Q) .Call("d_eta_d_phi",A,B,Q)
+
+latpos_XWX <- function(X,p,n,weights) .Call("latpos_XWX",X,p,n,weights)
+
 eta <- function(A,B){
 
     D <- ncol(A)

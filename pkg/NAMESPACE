@@ -1,4 +1,5 @@
-import(munfold,Matrix,mvtnorm,memisc,sfsmisc,ff)
+useDynLib(manifestos)
+import(munfold,Matrix,mvtnorm,memisc,sfsmisc)
 export(latpos)
 export(restrictor)
 export(as.unfolding)

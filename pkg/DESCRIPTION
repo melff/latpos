@@ -12,4 +12,5 @@ Description: This package provides an MCEM algorithm to
   based on multinomial counts.
 License: GPL-2
 LazyLoad: Yes
-Depends: Matrix, mvtnorm, munfold, memisc
+Depends: Matrix, mvtnorm, munfold, memisc, Rcpp (>= 0.9.4), RcppArmadillo (>= 0.2.0)
+LinkingTo: Rcpp, RcppArmadillo

@@ -3,6 +3,7 @@ latpos.eval.parms <- function(y,n,j,t,parm,U,replications,compute,weights){
   ndim <- length(parm$latent.dims)
   #nmiss.weights <- !missing(weights)
   if(missing(weights)) weights <- rep(1,nrow(U))
+  else weights <- as.vector(weights)
 
   s <- 1:nrow(U)
   s0 <- ifelse(t==0,0,s-1)
@@ -41,19 +42,22 @@ latpos.eval.parms <- function(y,n,j,t,parm,U,replications,compute,weights){
 
   if(any(c("deviance","p","logLik.j","XWX","XWy","G.j") %in% compute)){
 
-    eta <- eta(A,B)
-    exp.eta <- exp(eta)
-    p <- sweep(exp.eta,2,colSums(exp.eta),"/")
-
-    I <- nrow(A)
-    wn <- as.vector(rep(weights,each=I)*n)
-    ll <- wn*y*log(p)
+#     eta <- eta(A,B)
+#     exp.eta <- exp(eta)
+#     p <- sweep(exp.eta,2,colSums(exp.eta),"/")
+#     p.oldstyle <- p
+    p <- latpos_p(A,B)
+# browser()
+    #I <- nrow(A)
+    #wn <- as.vector(rep(weights,each=I)*n)
+    #ll.oldstyle <- wn*y*log(p)
+    ll <- ll_p(p,y,n,weights)
   }
 
   res <- list()
   if("deviance" %in% compute){
 
-    dev.resid <- wn*y*log(y) - ll
+    dev.resid <- ll_p(y,y,n,weights) - ll
     dev.resid[y==0] <- 0
   #if(any(weights!=1)) browser()
     res$deviance <- 2*sum(dev.resid) + sum(ssq) - sum(logDet)
@@ -73,23 +77,36 @@ latpos.eval.parms <- function(y,n,j,t,parm,U,replications,compute,weights){
 
   if(any(c("XWX","XWy","G.j") %in% compute)){
 
-    X <- d.eta.d.alpha(A,B)%*%parm$Q.phi 
-    if(parm$free.beta){
+#     X <- d.eta.d.alpha(A,B)%*%parm$Q.phi
+#     if(parm$free.beta){
+# 
+#       X.beta <- d.eta.d.beta(A,U)
+#       X <- cbind(X,X.beta)
+#     }
+#     X.oldstyle <- X
 
-      X.beta <- d.eta.d.beta(A,U)
-      X <- cbind(X,X.beta)
+    if(parm$free.beta){
+      X <- d.eta.d.phibeta(A,B,parm$Q.phi)
     }
+    else
+      X <- d.eta.d.phi(A,B,parm$Q.phi)
+
     jtk <- rep(1:ncol(y),each=nrow(y))
-    p <- as.vector(p)
+
+# browser()
   }
+
   if(any(c("XWX","XWy") %in% compute)){
-    wX <- X - rowsum(p*X,jtk)[jtk,]
-    res$XWX <- crossprod(wX,(wn*p)*wX)
+    #wX <- X - rowsum(as.vector(p)*X,jtk)[jtk,]
+    #res$XWX <- crossprod(wX,(wn*as.vector(p))*wX)
+    #XWX.oldstyle <- crossprod(wX,(wn*as.vector(p))*wX)
+    res$XWX <- latpos_XWX(X,p,n,weights)
+    #browser()
   }
   if("XWy" %in% compute){
 
-    y <- as.vector(y)
-    Xr <- crossprod(X,wn*(y-p))
+    #Xr.oldstyle <- crossprod(X,wn*as.vector(y-p))
+    Xr <- crossprod(X,latpos_resid(p,y,n,weights))
     psi <- parm$phi
     if(parm$free.beta)
       psi <- c(psi,parm$beta)
@@ -98,6 +115,8 @@ latpos.eval.parms <- function(y,n,j,t,parm,U,replications,compute,weights){
   }
   if("G.j" %in% compute){
 
+    I <- nrow(y)
+    p <- as.vector(p)
     y <- as.vector(y)
     n <- as.vector(n)
     w <- as.vector(rep(weights,each=I))
