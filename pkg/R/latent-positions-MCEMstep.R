@@ -209,28 +209,28 @@ latpos.MCEMstep <- function(resp,parm,
 
     cat("\nCurrent log-likelihood:",logLik)
 
-    if(diff.logLik >= 0 || latent.data$sample.size > last.sample.size){
+#     if(diff.logLik >= 0 || latent.data$sample.size > last.sample.size){
 
       cat(" - increase:",diff.logLik)
       cat(" - relative increase:",crit.logLik*sign(diff.logLik))
 
-    }
-    else {
-
-      cat(" - would be a decrease:",diff.logLik)
-      cat(" stepping back")
-
-      parm <- last.parm
-      converged<-TRUE
-      Utilde <- latpos.utilde(resp=resp,parm=parm,maxiter=maxiter,verbose=FALSE)
-      parm$Utilde <- Utilde
-      latent.data <- latpos.simul(resp=resp,parm=parm,
-                            latent.data=latent.data,
-                            sampler=sampler)
-      sample.size <- latent.data$sample.size
-      parm$logLik <- logLik <- sum(latent.data$ll.j)
-      
-    }
+#     }
+#     else {
+# 
+#       cat(" - would be a decrease:",diff.logLik)
+#       cat(" stepping back")
+# 
+#       parm <- last.parm
+#       converged<-TRUE
+#       Utilde <- latpos.utilde(resp=resp,parm=parm,maxiter=maxiter,verbose=FALSE)
+#       parm$Utilde <- Utilde
+#       latent.data <- latpos.simul(resp=resp,parm=parm,
+#                             latent.data=latent.data,
+#                             sampler=sampler)
+#       sample.size <- latent.data$sample.size
+#       parm$logLik <- logLik <- sum(latent.data$ll.j)
+#       
+#     }
     
   }
 

@@ -1,7 +1,7 @@
 #include "manifestos.h"
 
 RcppExport SEXP ll_p (SEXP P_, SEXP Y_, SEXP N_, SEXP W_) {
-
+BEGIN_RCPP
   using namespace Rcpp;
   
   NumericMatrix P(P_);
@@ -22,4 +22,5 @@ RcppExport SEXP ll_p (SEXP P_, SEXP Y_, SEXP N_, SEXP W_) {
     Res(i,_) = W*Y(i,_)*N(i,_)*log(P(i,_));
   }
   return Res;
+END_RCPP
 }

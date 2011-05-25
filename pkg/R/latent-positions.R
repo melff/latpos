@@ -1,7 +1,7 @@
 
 latpos <- function(formula,data,subset,id,time,
                    unfold.method="Schoenemann",start=NULL,
-                   sampler=mvnorm.sampler(),
+                   sampler=mvt.sampler(df=7*length(latent.dims)),
                    ...){
 
   latent.dims <- all.vars(formula[c(1,3)])

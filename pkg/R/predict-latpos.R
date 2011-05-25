@@ -251,7 +251,9 @@ predict.latpos <- function(object, newdata = NULL, id=NULL, time=NULL,
         res <- array(B,c(dim(B),3))
         prob <- (1 - level)/2
         prob <- c(prob,1-prob)
-        B.lowup <- aperm(beta+aperm(apply(Usim,c(2,3),quantile,probs=prob),c(2,1,3)),c(3,1,2))
+        B.lowup <- apply(Usim,c(2,3),quantile,probs=prob)
+        B.lowup <- beta+aperm(B.lowup,c(3,2,1))
+        B.lowup <- aperm(B.lowup,c(2,1,3))
         res[,,2:3] <- B.lowup
         dimnames(res) <- list(dimnames(B)[[1]],latent.dims,c("fit","lwr","upr"))
         return(res[orig.order,,])

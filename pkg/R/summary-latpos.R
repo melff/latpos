@@ -602,9 +602,9 @@ toLatex.summary.latpos <- function(x,...){
 
 
   totals <- matrix(c(
-                    "N. of units:",x$total.units,
-                    "N. of observations:",x$total.obs,
-                    "N. of counts:",x$total.counts
+                    "Number of units:",x$total.units,
+                    "Number of observations:",x$total.obs,
+                    "Sum of counts:",x$total.counts
                     ),byrow=TRUE,ncol=2)
 
 

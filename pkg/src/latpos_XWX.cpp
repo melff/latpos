@@ -1,6 +1,7 @@
 #include "manifestos.h"
 
 RcppExport SEXP latpos_XWX (SEXP X_, SEXP P_, SEXP N_, SEXP W_){
+BEGIN_RCPP
 
   using namespace Rcpp;
   NumericMatrix X(X_), P(P_), N(N_);
@@ -30,5 +31,6 @@ RcppExport SEXP latpos_XWX (SEXP X_, SEXP P_, SEXP N_, SEXP W_){
     XWX += trans(Xjmat) * WW * Xjmat;
   }
   return wrap(XWX);
+END_RCPP
 }
 

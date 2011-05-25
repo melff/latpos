@@ -1,6 +1,7 @@
 #include "manifestos.h"
 
 RcppExport SEXP d_eta_d_phi (SEXP A_, SEXP B_, SEXP Q_){
+BEGIN_RCPP
 
   using namespace Rcpp;
   NumericMatrix A(A_), B(B_), Q(Q_);
@@ -49,9 +50,11 @@ RcppExport SEXP d_eta_d_phi (SEXP A_, SEXP B_, SEXP Q_){
   }
 
   return X;
+END_RCPP
 }
 
 RcppExport SEXP d_eta_d_phibeta  (SEXP A_, SEXP B_, SEXP Q_){
+BEGIN_RCPP
 
   using namespace Rcpp;
   NumericMatrix A(A_), B(B_), Q(Q_);
@@ -66,8 +69,8 @@ RcppExport SEXP d_eta_d_phibeta  (SEXP A_, SEXP B_, SEXP Q_){
   if(Q.nrow()!=m_ndims) return R_NilValue;
   int r = Q.ncol();
 
-  NumericMatrix X(n*m,r);
-  NumericVector Tmp(m_ndims);
+  NumericMatrix X(n*m,r+ndims);
+  NumericMatrix Tmp(m,ndims);
 
   for(int j = 0; j < n; j++){
 
@@ -106,6 +109,7 @@ RcppExport SEXP d_eta_d_phibeta  (SEXP A_, SEXP B_, SEXP Q_){
   }
 
   return X;
+END_RCPP
 }
 
 

@@ -20,15 +20,15 @@ mvt.sampler <- function(df,fix.seed=TRUE){
 
   sample <- function(size,ndim){
 
-      size1 <- size-1
-      if(size1%%2) stop("need even sample size for anti-thetic variates")
+      #size1 <- size-1
+      if(size%%2) stop("need even sample size for anti-thetic variates")
       U <- matrix(NA,nrow=size,ncol=ndim)
       #size1 <- size1 %/% 2
       size1 <- size %/% 2
       ii <- (1:size1)*2
       #U[1,] <- 0
       U[ii,] <- rmvt(size1,sigma=diag(ndim),df=df)
-      U[ii+1,] <- -U[ii,]
+      U[ii-1,] <- -U[ii,]
       U
   }
 

@@ -1,6 +1,7 @@
 #include "manifestos.h"
 
 RcppExport SEXP latpos_resid (SEXP P_, SEXP Y_, SEXP N_, SEXP W_) {
+BEGIN_RCPP
 
   using namespace Rcpp;
   
@@ -24,4 +25,5 @@ RcppExport SEXP latpos_resid (SEXP P_, SEXP Y_, SEXP N_, SEXP W_) {
     Res[r] = (W[j]*N(_,j))*(Y(_,j)-P(_,j));
   }
   return Res;
+END_RCPP
 }
