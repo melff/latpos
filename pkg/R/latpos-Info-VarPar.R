@@ -1,288 +1,240 @@
-VarParResids <- function(resp,parm,latent.data){
+CrossProd <- function(X,Y=X){
 
-  U.sim <- latent.data$U.sim
-  w.sim <- latent.data$w.sim
+    stopifnot(nrow(X)==nrow(Y))
+    Y <- array(Y,dim=c(nrow(Y),ncol(Y),ncol(X)))
+    Y <- aperm(Y,c(1,3,2))
+    Y*as.vector(X)
+}
+
+VarPar_GradVar <- function(resp,parm,latent.data){
+
+  U <- latent.data$U.sim
+  w <- latent.data$w.sim
   j <- resp$j
   t <- resp$t
   t0 <- resp$t0
   s0 <- resp$s0
   s1 <- resp$s1
+  t0[t0] <- which(t0)
 
-  Sigma <- parm$Sigma
-  Theta <- parm$Theta
-  rho <- parm$rho
+  Sigma0 <- parm$Sigma0
+  Sigma1 <- parm$Sigma1
+  Theta0 <- solve(Sigma0)
+  Theta1 <- solve(Sigma1)
+  Gamma <- parm$Gamma
   tau <- parm$tau
 
   Tj1 <- parm$Tj1
-
-  free.rho <- parm$free.rho
-
-  t0[t0] <- which(t0)
-  u.j <- unique(j)
-  jt <- 1:nrow(U.sim)
-
-  jt <- split(jt,j)
-
-  res <- lapply(u.j,function(j){
-                    jt <- jt[[j]]
-                    t0 <- t0[jt]
-                    s0 <- s0[jt]
-                    s1 <- s1[jt]
-                    t0 <- t0[t0>0]
-                    s0 <- s0[s0>0]
-                    s1 <- s1[s1>0]
-                    VarParRes.j(
-                        Sigma=Sigma,
-                        Theta=Theta,
-                        rho=rho,
-                        tau=tau,
-                        Tj1=Tj1[j],
-                        w=w.sim[j,],
-                        U.t0=U.sim[t0,,,drop=FALSE],
-                        U.s0=U.sim[s0,,,drop=FALSE],
-                        U.s1=U.sim[s1,,,drop=FALSE],
-                        free.rho=free.rho
-                      )})
-
-}
-
-
-VarParRes.j <- function(Sigma,Theta,rho,tau,Tj1,w,U.t0,U.s0,U.s1,free.rho){
-
   Tj <- Tj1-1
 
-  S0 <- array(U.t0,dim(U.t0)[c(1,2,3,3)])
-  S0 <- S0*aperm(S0,c(1,2,4,3))
-  S0 <- colSums(S0)
+  J <- max(j)
+  D <- dim(U)[3]
+  nsim <- dim(U)[2]
 
-  S1 <- array(U.s0,dim(U.s0)[c(1,2,3,3)])
-  S2 <- array(U.s1,dim(U.s1)[c(1,2,3,3)])
+  npars <- length(Theta0)+length(Theta1)+length(Gamma)+1
 
-  S3 <- colSums(S2*aperm(S2,c(1,2,4,3)))
-  S2 <- colSums(S1*aperm(S2,c(1,2,4,3)))
-  S1 <- colSums(S1*aperm(S1,c(1,2,4,3)))
+  G <- array(0,c(J,npars,npars))
+  g <- array(0,c(J,npars))
+  S11 <- array(0,c(J,D,D))
 
-  S0 <- aperm(S0,c(2,3,1))
-  S1 <- aperm(S1,c(2,3,1))
-  S2 <- (aperm(S2,c(2,3,1))+aperm(S2,c(3,2,1)))/2
-  S3 <- aperm(S3,c(2,3,1))
+  for(jj in 1:J){
 
-  nsim <- dim(S1)[3]
-  ndim <- dim(S1)[1]
-  ndim2 <- ndim*ndim
+    t0.j <- t0[j==jj]
+    s0.j <- s0[j==jj]
+    s1.j <- s1[j==jj]
+    T.j <- Tj[jj]
+    T1.j <- Tj1[jj]
+    
+    U.j0 <- U[t0.j,,,drop=FALSE]
+    U.js0 <- U[s0.j,,,drop=FALSE]
+    U.js1 <- U[s1.j,,,drop=FALSE]
 
-  V <- S3 - 2*rho*S2 + rho^2*S1
+    dim(U.j0) <- dim(U.j0)[2:3]
+    dim(U.js0) <- c(prod(dim(U.js0)[1:2]),dim(U.js0)[3])
+    dim(U.js1) <- c(prod(dim(U.js1)[1:2]),dim(U.js1)[3])
+    diff.U.js <- U.js1 - tcrossprod(U.js0,Gamma)
 
-  R.Theta <- (as.vector(Tj1*Sigma) - as.vector(S0 + tau*V))/2
-  dim(R.Theta) <- c(ndim^2,nsim)
-  dim(V) <- c(ndim2,nsim)
-  dim(S2) <- c(ndim2,nsim)
-  dim(S1) <- c(ndim2,nsim)
-  vecTheta <- as.vector(Theta)
+    S00j <- CrossProd(U.j0)
+    
+    V22j <- CrossProd(diff.U.js)
+    R12j <- CrossProd(U.js0,diff.U.js)
 
-  R.Theta <- t(R.Theta)
-  S2 <- t(S2)
-  S1 <- t(S1)
-  V <- t(V)
+    dim(V22j) <- c(T.j,nsim,D,D)
+    dim(R12j) <- c(T.j,nsim,D,D)
+    V22j <- colSums(V22j)
+    R12j <- colSums(R12j)
 
-  R.rho <- tau*((S2-rho*S1)%*%vecTheta)
-  R.tau <- (ndim*Tj/tau-V%*%vecTheta)/2
+    D.sq <- D*D
 
-  wR.Theta <- w*R.Theta
-  wR.rho <- w*R.rho
-  wR.tau <- w*R.tau
+    grad.Theta0.j <- sweep(-S00j,c(2,3),Sigma0,"+")
+    grad.Theta1.j <- sweep(-tau^2*V22j,c(2,3),T.j*Sigma1,"+")
+    grad.Gamma.j <- tau^2*matrix(R12j,nrow=prod(dim(R12j)[1:2]),ncol=D)%*%Theta1
+    grad.tau.j <- D*T.j/tau - tau*(matrix(V22j,nrow=dim(V22j)[1],ncol=D.sq)%*%as.vector(Theta1))
 
-  RR.Theta <- crossprod(R.Theta,wR.Theta)
-  RR.Theta.rho <- crossprod(R.Theta,wR.rho)
-  RR.Theta.tau <- crossprod(R.Theta,wR.tau)
-  RR.rho.tau <- crossprod(R.rho,wR.tau)
-  RR.rho <- crossprod(R.rho,wR.rho)
-  RR.tau <- crossprod(R.tau,wR.tau)
+    dim(grad.Theta0.j) <- c(nsim,D.sq)
+    dim(grad.Theta1.j) <- c(nsim,D.sq)
+    dim(grad.Gamma.j) <- c(nsim,D.sq)
+    
+    grad.j <- cbind(grad.Theta0.j,grad.Theta1.j,grad.Gamma.j,grad.tau.j)
 
-  wRwR.Theta <- crossprod(wR.Theta,wR.Theta)
-  wRwR.Theta.rho <- crossprod(wR.Theta,wR.rho)
-  wRwR.Theta.tau <- crossprod(wR.Theta,wR.tau)
-  wRwR.rho.tau <- crossprod(wR.rho,wR.tau)
-  wRwR.rho <- crossprod(wR.rho,wR.rho)
-  wRwR.tau <- crossprod(wR.tau,wR.tau)
+    w.j <- w[jj,]
 
-  R.Theta <- colSums(wR.Theta)
-  R.rho <- colSums(wR.rho)
-  R.tau <- colSums(wR.tau)
+    G[jj,,] <- crossprod(grad.j,w.j*grad.j)
+    g[jj,] <- crossprod(w.j,grad.j)
 
-  wwR.Theta <- drop(crossprod(w,wR.Theta))
-  wwR.rho <- drop(crossprod(w,wR.rho))
-  wwR.tau <- drop(crossprod(w,wR.tau))
-
-  wwR.R.Theta <- tcrossprod(wwR.Theta,R.Theta)
-  wwR.R.Theta.rho <- tcrossprod(wwR.Theta,R.rho)
-  wwR.R.Theta.tau <- tcrossprod(wwR.Theta,R.tau)
-  wwR.R.rho.Theta <- tcrossprod(wwR.rho,R.Theta)
-  wwR.R.rho <- tcrossprod(wwR.rho,R.rho)
-  wwR.R.rho.tau <- tcrossprod(wwR.rho,R.tau)
-  wwR.R.tau.Theta <- tcrossprod(wwR.tau,R.Theta)
-  wwR.R.tau.rho <- tcrossprod(wwR.tau,R.rho)
-  wwR.R.tau <- tcrossprod(wwR.tau,R.tau)
-
-  ww <- sum(w^2)
-
-  ww.RR.Theta <- ww*tcrossprod(R.Theta,R.Theta)
-  ww.RR.Theta.rho <- ww*tcrossprod(R.Theta,R.rho)
-  ww.RR.Theta.tau <- ww*tcrossprod(R.Theta,R.tau)
-  ww.RR.rho <- ww*tcrossprod(R.rho,R.rho)
-  ww.RR.rho.tau <- ww*tcrossprod(R.rho,R.tau)
-  ww.RR.tau <- ww*tcrossprod(R.tau,R.tau)
-
-
-  S1 <- crossprod(S1,w)
-  dim(S1) <- c(ndim,ndim)
-  S2 <- crossprod(S2,w)
-  dim(S2) <- c(ndim,ndim)
-  V <- crossprod(V,w)
-  dim(V) <- c(ndim,ndim)
-
-  if(free.rho){
-
-    R <- c(R.Theta, R.rho, R.tau)
-
-    RR <- rbind(cbind(RR.Theta,RR.Theta.rho,RR.Theta.tau),
-                cbind(t(RR.Theta.rho),RR.rho,RR.rho.tau),
-                cbind(t(RR.Theta.tau),RR.rho.tau,RR.tau))
-
-    wRwR <- rbind(cbind(wRwR.Theta,wRwR.Theta.rho,wRwR.Theta.tau),
-                cbind(t(wRwR.Theta.rho),wRwR.rho,wRwR.rho.tau),
-                cbind(t(wRwR.Theta.tau),wRwR.rho.tau,wRwR.tau))
-
-    wwR.R <- rbind(cbind(wwR.R.Theta,wwR.R.Theta.rho,wwR.R.Theta.tau),
-                cbind(wwR.R.rho.Theta,wwR.R.rho,wwR.R.rho.tau),
-                cbind(wwR.R.tau.Theta,wwR.R.tau.rho,wwR.R.tau))
-
-    ww.RR <- rbind(cbind(ww.RR.Theta,ww.RR.Theta.rho,ww.RR.Theta.tau),
-                cbind(t(ww.RR.Theta.rho),ww.RR.rho,ww.RR.rho.tau),
-                cbind(t(ww.RR.Theta.tau),ww.RR.rho.tau,ww.RR.tau))
-
-  }
-  else {
-
-    R <- c(R.Theta, R.tau)
-
-    RR <- rbind(cbind(RR.Theta,RR.Theta.tau),
-                cbind(t(RR.Theta.tau),RR.tau))
-
-    wRwR <- rbind(cbind(wRwR.Theta,wRwR.Theta.tau),
-                cbind(t(wRwR.Theta.tau),wRwR.tau))
-
-    wwR.R <- rbind(cbind(wwR.R.Theta,wwR.R.Theta.tau),
-                cbind(wwR.R.tau.Theta,wwR.R.tau))
-
-    ww.RR <- rbind(cbind(ww.RR.Theta,ww.RR.Theta.tau),
-                cbind(t(ww.RR.Theta.tau),ww.RR.tau))
-
+    S11[jj,,] <- crossprod(U.js0,w.j*U.js0)
   }
 
-  var.R <- wRwR - wwR.R - t(wwR.R) + ww.RR
-
-  list(R=R,RR=RR,S1=S1,S2=S2,V=V,var.R=var.R)
+  var.gradient <- colSums(G)-crossprod(g)
+  S11 <- colSums(S11)
+  
+  list(gradient=g,var.gradient=var.gradient,S11=S11)
 }
+
+
+
 
 latpos.GradInfo_VarPar <- function(resp,parm,latent.data){
 
-  Sigma <- parm$Sigma
-  Theta <- parm$Theta
+  Sigma0 <- parm$Sigma0
+  Sigma1 <- parm$Sigma1
+  Gamma  <- parm$Gamma
+
+  Lambda0 <- chol(Sigma0)
+  Lambda1 <- chol(Sigma1)
+
+  Theta0 <- chol2inv(Lambda0)
+  Theta1 <- chol2inv(Lambda1)
 
   tau <- parm$tau
-  rho <- parm$rho
-
+  
   free.Sigma <- parm$free.Sigma
   free.rho <-   parm$free.rho
 
-  zeta <- 1/tau
   
   Tj <-  parm$Tj
   Tj1 <- parm$Tj1
-  D <- ncol(Sigma)
+  D <- ncol(Sigma0)
+  D.sq <- D*D
 
-  sum.Tj1 <- sum(Tj1)
-  sum.Tj <- sum(Tj)
+  bT1 <- sum(Tj1)
+  bT <- sum(Tj)
 
-  Theta.x.Theta <- Theta %x% Theta
-  d.theta.d.sigma <- -Theta.x.Theta
-  d.tau.d.zeta <- -tau^2
-  
-  Info.cpl.Theta <- sum.Tj1/2*(Sigma %x% Sigma)
-  Info.cpl.Sigma <- sum.Tj1/2*Theta.x.Theta
+  Theta0.x.Theta0 <- Theta0 %x% Theta0
+  Theta1.x.Theta1 <- Theta1 %x% Theta1
 
-  Info.cpl.tau <- D*sum.Tj/2*zeta^2
-  Info.cpl.zeta <- D*sum.Tj/2*tau^2
+  Info.Sigma0 <- Theta0.x.Theta0
+  Info.Sigma1 <- Theta1.x.Theta1
 
-  resids <- VarParResids(resp=resp,parm=parm,latent.data=latent.data)
+  d.theta0.d.sigma0 <- Sigma0 %x% Sigma0
+  d.theta1.d.sigma1 <- Sigma1 %x% Sigma1
 
-  R <- sapply(resids,"[[", i="R")
-  RR <- Sapply(resids,"[[", i="RR")
+  d.sigma0.d.lambda0 <- array(0,c(D,D,D,D))
+  d.sigma1.d.lambda1 <- array(0,c(D,D,D,D))
+  defg <- quick.grid(d=1:D,e=1:D,f=1:D,g=1:D)
+  d <- defg[,1]
+  e <- defg[,2]
+  f <- defg[,3]
+  g <- defg[,4]
+  delta.de <- as.numeric(d==e)
+  delta.ge <- as.numeric(g==e)
+  dg <- defg[,c(1,4)]
+  df <- defg[,c(1,3)]
+  d.sigma0.d.lambda0[defg] <- delta.de*Lambda0[dg]+Lambda0[df]*delta.ge
+  d.sigma1.d.lambda1[defg] <- delta.de*Lambda1[dg]+Lambda1[df]*delta.ge
+  dim(d.sigma0.d.lambda0) <- c(D.sq,D.sq)
+  dim(d.sigma1.d.lambda1) <- c(D.sq,D.sq)
 
-  S1 <- sapply(resids,"[[", i="S1")
-  S1 <- if(is.matrix(S1))rowSums(S1) else sum(S1)
+  vp <- VarPar_GradVar(resp=resp,parm=parm,latent.data=latent.data)
+  gradient <- vp$gradient
+  var.gradient <- vp$var.gradient
+  S11 <- vp$S11
 
-  #S2 <- sapply(resids,"[[", i="S2")
-  #S2 <- if(is.matrix(S2))rowSums(S2) else sum(S2)
 
-  #V <- sapply(resids,"[[", i="V")
-  #V <- if(is.matrix(V))rowSums(V) else sum(V)
+  Info.Gamma <- S11 %x% (tau^2*Theta0)
 
-  var.R <- Sapply(resids,"[[", i="var.R")
-  
-  #S2rhoS1 <- S2-rho*S1
+  Info.tau <- D*bT/tau^2
 
-  Info.cpl.rho <- tau*crossprod(S1,as.vector(Theta))
-  Info.cpl.Theta.rho <- numeric(length=length(Theta))
-  Info.cpl.Theta.tau <- sum.Tj/2*zeta*as.vector(Sigma)
-  Info.cpl.rho.tau <- 0
+  Info.Lambda0 <- d.sigma0.d.lambda0%*%tcrossprod(Info.Sigma0,d.sigma0.d.lambda0)
+  Info.Lambda1 <- d.sigma1.d.lambda1%*%tcrossprod(Info.Sigma1,d.sigma1.d.lambda1)
 
-  Info.cpl.Sigma.rho <- d.theta.d.sigma%*%Info.cpl.Theta.rho
-  Info.cpl.Sigma.zeta <- d.theta.d.sigma%*%Info.cpl.Theta.tau*d.tau.d.zeta
-  Info.cpl.rho.zeta <- Info.cpl.rho.tau*d.tau.d.zeta
 
-  RR <- rowSums(RR,dims=2) - tcrossprod(R)
-  R <- rowSums(R)
-  var.R <- rowSums(var.R,dims=2)
+  Info.Lambda <- as.matrix(bdiag(Info.Lambda0,Info.Lambda1))
 
-  if(free.rho){
-    Info.cpl <- rbind(
-                  cbind(Info.cpl.Sigma,Info.cpl.Sigma.rho,Info.cpl.Sigma.zeta),
-                  cbind(t(Info.cpl.Sigma.rho),Info.cpl.rho,Info.cpl.rho.zeta),
-                  cbind(t(Info.cpl.Sigma.zeta),Info.cpl.rho.zeta,Info.cpl.zeta)
-                  )
-    Trans <- bdiag(d.theta.d.sigma,1, d.tau.d.zeta)
+  Q.kappa <- parm$Q.kappa
+  Info.kappa <- crossprod(Q.kappa,Info.Lambda%*%Q.kappa)
+
+  Info.Theta1.tau <- bT/tau*as.vector(Sigma1)
+  Info.Sigma1.tau <- d.theta1.d.sigma1%*%Info.Theta1.tau
+  Info.Lambda1.tau <- d.sigma1.d.lambda1%*%Info.Sigma1.tau
+  Info.Lambda.tau <- c(rep(0,D.sq),Info.Lambda1.tau)
+  Q.kappa0 <- parm$Q.kappa0
+  Q.kappa1 <- parm$Q.kappa1
+  Info.kappa.tau <- c(crossprod(Q.kappa,Info.Lambda.tau))
+
+  if(length(parm$Q.rho)){
+
+    Q.rho <- parm$Q.rho
+    Info.rho <- crossprod(Q.rho,Info.Gamma%*%Q.rho)
+    Info.rho.tau <- rep(0,ncol(Q.rho))
   }
-  else{
-    Info.cpl <- rbind(
-                  cbind(Info.cpl.Sigma,Info.cpl.Sigma.zeta),
-                  cbind(t(Info.cpl.Sigma.zeta),Info.cpl.zeta)
-                  )
-    Trans <- bdiag(d.theta.d.sigma,d.tau.d.zeta)
+  else {
+
+    Info.rho <- Info.rho.tau <- Q.rho <- matrix(0,0,0)
   }
 
-  Info.miss <- Trans%*%tcrossprod(RR,Trans)
-  gradient <- Trans%*%R
-  var.gradient <- Trans%*%tcrossprod(var.R,Trans)
+  Info.cpl <- as.matrix(bdiag(Info.kappa,Info.rho))
+
+  if(parm$free.Sigma01=="scaled"){
+
+    Info.cpl <- cbind(Info.cpl,c(Info.kappa.tau,Info.rho.tau))
+    Info.cpl <- rbind(Info.cpl,c(Info.kappa.tau,Info.rho.tau,Info.tau))
+  }
+
+  Info.miss <- var.gradient
+
+  if(parm$free.Gamma=="none"){
+      ii.Gamma <- 2*D.sq + 1:D.sq
+      Info.miss <- Info.miss[-ii.Gamma,-ii.Gamma]
+      Qmat <- Q.kappa
+  }
+  else
+      Qmat <- as.matrix(bdiag(Q.kappa,Q.rho))
+
+  if(parm$free.Sigma01=="scaled"){
+
+    Qmat <- as.matrix(bdiag(Qmat,1))
+  }
+  else {
+
+    np <- ncol(Info.miss)
+    Info.miss <- Info.miss[-np,-np]
+  }
+  Info.miss <- crossprod(Qmat,Info.miss%*%Qmat)
 
   Info.obs <- Info.cpl - Info.miss
 
-  Q.sigma <- parm$Q.sigma
-  if(free.rho)
-    Qmat <- bdiag(Q.sigma,1,1)
-  else
-    Qmat <- bdiag(Q.sigma,1)
+  covmat <- solve(Info.obs)
+  covmat <- Qmat%*%tcrossprod(covmat,Qmat)
 
-  #Info.obs <- crossprod(Qmat,Info.obs%*%Qmat)
-  gradient <- crossprod(Qmat,gradient)
-  var.gradient <- crossprod(Qmat,var.gradient%*%Qmat)
+  d.parm.d.parmred <- bdiag(d.sigma0.d.lambda0,d.sigma1.d.lambda1)
+  if(parm$free.Gamma!="none"){
 
+    d.parm.d.parmred <- bdiag(d.parm.d.parmred,diag(nrow=D.sq))
+  }
+  if(parm$free.Sigma01=="scaled"){
+
+    d.parm.d.parmred <- bdiag(d.parm.d.parmred,1)
+  }
+  d.parm.d.parmred <- as.matrix(d.parm.d.parmred)
+  covmat <- d.parm.d.parmred %*% tcrossprod(covmat,d.parm.d.parmred)
+  
   list(
-    gradient=as.vector(gradient),
+    covmat=covmat,
+    gradient=as.matrix(gradient),
     Information=as.matrix(Info.obs),
     Info.cpl=as.matrix(Info.cpl),
     Info.miss=as.matrix(Info.miss),
     var.gradient=as.matrix(var.gradient),
-    restrictor=as.matrix(Qmat))
+    restrictor=Qmat)
 }

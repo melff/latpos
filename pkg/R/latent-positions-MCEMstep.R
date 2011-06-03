@@ -20,32 +20,26 @@ latpos.MCEMstep <- function(resp,parm,
   Q.linesearch  <- control$Q.linesearch
   
 
+  used.sample.size <- parm$sample.size
   last.parm <- parm
-
-  last.psi <- last.parm$phi
-  if(last.parm$free.beta) last.psi <- c(last.psi,last.parm$beta)
-  if(last.parm$free.Sigma!="none") last.psi <- c(last.psi,vech(last.parm$Sigma))
-  if(last.parm$free.rho) last.psi <- c(last.psi,last.parm$rho)
-  last.psi <- c(last.psi,1/last.parm$tau)
+  last.psi <- parm2psi(last.parm)
 
   if(!latent.data$sample.size) latent.data$sample.size <- initial.size
-  sample.size <- latent.data$sample.size
-  last.sample.size <- sample.size
-  sample.size.start <- sample.size
-  
-  
+
+  sample.size.start <- latent.data$sample.size
+
   last.logLik <- last.parm$logLik
 
   diffQsign <- FALSE
   converged <- FALSE
   maybe.converged <- FALSE
-  used.sample.size <- latent.data$sample.size
-  last.sample.size <- used.sample.size
 
   cat("\n\n**** Monte Carlo EM Iteration",iter,"****")
   while(!diffQsign && !converged && !maybe.converged) {
 
+    last.sample.size <- used.sample.size
     used.sample.size <- latent.data$sample.size
+    cat("\nCurrent sample size: ",used.sample.size)
     maybe.converged <- FALSE
     ## The M-step: Location parameters
     
@@ -64,12 +58,8 @@ latpos.MCEMstep <- function(resp,parm,
     ASE.diff.Q.psi <- Lambda.Q.res$ASE.diff.Q
     cat("\nQ improvement:",diff.Q.psi)
 
-    psi <- parm$phi
-    if(parm$free.beta) psi <- c(psi,parm$beta)
-    if(parm$free.Sigma!="none") psi <- c(psi,vech(parm$Sigma))
-    if(parm$free.rho) psi <- c(psi,parm$rho)
-    psi <- c(psi,1/parm$tau)
-
+    psi <- parm2psi(parm)
+    
     zval.diff.Q.psi <- diff.Q.psi/ASE.diff.Q.psi
     crit.diff.Q.psi <- abs(diff.Q.psi + qnorm(diff.Q.alpha)*ASE.diff.Q.psi)/(.1+abs(Q.psi))
     diff.psi <- psi - last.psi
@@ -83,6 +73,7 @@ latpos.MCEMstep <- function(resp,parm,
       crit.diff.Q.psi > diff.Q.eps &&
       psi.crit > rel.diff.psi.eps &&
       abs(psi.max.diff) > abs.diff.psi.eps &&
+      used.sample.size == last.sample.size &&
       diff.Q.psi < 0){
 
       cat(" -- need to conduct line search")
@@ -95,9 +86,8 @@ latpos.MCEMstep <- function(resp,parm,
         parm$phi <- lambda*parm$phi + mlambda*last.parm$phi
         parm$beta <- lambda*parm$beta + mlambda*last.parm$beta
         parm$Gamma <- lambda*parm$Gamma + mlambda*last.parm$Gamma
-        parm$Sigma <- crossprod(parm$Gamma)
-        parm$Theta <- chol2inv(parm$Gamma)
-        parm$rho <- lambda*parm$rho + mlambda*last.parm$rho
+        parm$Sigma0 <- crossprod(lambda*chol(parm$Sigma0) + mlambda*chol(last.parm$Sigma0))
+        parm$Sigma1 <- crossprod(lambda*chol(parm$Sigma1) + mlambda*chol(last.parm$Sigma1))
         parm$tau <- lambda*parm$tau + mlambda*last.parm$tau
         Lambda.Q.res <- latpos.Lambda.Q(resp=resp,latent.data=latent.data,parm=parm,last.parm=last.parm)
         diff.Q.psi <- Lambda.Q.res$diff.Q
@@ -107,11 +97,7 @@ latpos.MCEMstep <- function(resp,parm,
 
       opt.res <- optimise(searchFun,interval=c(0,1))
       parm <- attr(opt.res$objective,"parm")
-      psi <- parm$phi
-      if(parm$free.beta) psi <- c(psi,parm$beta)
-      if(parm$free.Sigma!="none") psi <- c(psi,vech(parm$Sigma))
-      if(parm$free.rho) psi <- c(psi,parm$rho)
-      psi <- c(psi,1/parm$tau)
+      psi <- parm2psi(parm)
 
       Lambda.Q.res <- attr(opt.res$objective,"Lambda.Q.res")
       Q.psi <- Lambda.Q.res$Q
@@ -140,7 +126,7 @@ latpos.MCEMstep <- function(resp,parm,
     if(abs(psi.max.diff) < abs.diff.psi.eps)  maybe.converged <- TRUE
 
 
-    if(force.increase && diff.Q.psi<0 && diffQsign){
+    if(force.increase && used.sample.size == last.sample.size && diff.Q.psi<0 && diffQsign){
 
       cat("\nCannot improve Q-function, stepping back")
       parm <- last.parm
@@ -148,8 +134,7 @@ latpos.MCEMstep <- function(resp,parm,
       maybe.converged <- TRUE
     }
 
-    last.sample.size <- used.sample.size
-    sample.size.new <- latent.data$sample.size
+    parm$sample.size <- used.sample.size
 
     if(!diffQsign && latent.data$sample.size < max.size) {
 
@@ -161,12 +146,15 @@ latpos.MCEMstep <- function(resp,parm,
 
     } else if(maybe.converged){
 
-      if(latent.data$sample.size >= min.final.size)
+      if(latent.data$sample.size >= min.final.size){
+
+          sample.size.new <- latent.data$sample.size
           converged<-TRUE
+      }
       else{
 
         cat("\nMCEM algorithm may have converged, setting sample size to",min.final.size,"to be sure")
-        latent.data$sample.size <- min.final.size
+        sample.size.new <- min.final.size
       }
     }
     else{
@@ -194,14 +182,14 @@ latpos.MCEMstep <- function(resp,parm,
     Utilde <- latpos.utilde(resp=resp,parm=parm,maxiter=maxiter,verbose=FALSE)
     parm$Utilde <- Utilde
 
-    cat("\nGenerating Monte Carlo sample for the next step - size",latent.data$sample.size)
+    cat("\nGenerating Monte Carlo sample - size",latent.data$sample.size)
     ## The Monte-Carlo E-step: Simulating from
     ## the posterior distribution of the latent data
 
     latent.data <- latpos.simul(resp=resp,parm=parm,
                           latent.data=latent.data,
                           sampler=sampler)
-    sample.size <- latent.data$sample.size
+
     parm$logLik <- logLik <- sum(latent.data$ll.j)
 
     diff.logLik <- logLik - last.logLik
@@ -211,8 +199,8 @@ latpos.MCEMstep <- function(resp,parm,
 
 #     if(diff.logLik >= 0 || latent.data$sample.size > last.sample.size){
 
-      cat(" - increase:",diff.logLik)
-      cat(" - relative increase:",crit.logLik*sign(diff.logLik))
+    cat(" - increase:",diff.logLik)
+    cat(" - relative increase:",crit.logLik*sign(diff.logLik))
 
 #     }
 #     else {
@@ -231,6 +219,12 @@ latpos.MCEMstep <- function(resp,parm,
 #       parm$logLik <- logLik <- sum(latent.data$ll.j)
 #       
 #     }
+
+    if(crit.logLik < diff.logLik.eps && latent.data$sample.size >= min.final.size){
+
+      converged <- TRUE
+      break
+    }
     
   }
 
@@ -385,3 +379,4 @@ latpos.Lambda.Q <- function(resp,latent.data,parm,last.parm){
       diff.Q=diff.Q,
       ASE.diff.Q=ASE.diff.Q)
 }
+

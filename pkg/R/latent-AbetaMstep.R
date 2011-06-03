@@ -2,9 +2,8 @@ latpos.AbetaMstep <- function(resp,parm,latent.data,maxiter){
 
     A <- parm$A
     beta <- parm$beta
-    Theta <- parm$Theta
     Q.phi <- parm$Q.phi
-    kappa.phi <- parm$kappa.phi
+    r.phi <- parm$r.phi
 
     JT <- ncol(resp$y)
     I <- nrow(resp$y)
@@ -29,7 +28,7 @@ latpos.AbetaMstep <- function(resp,parm,latent.data,maxiter){
       psi <- solve(XWX,XWy)
       #cat(" psi =",psi)
       phi <- psi[1:l.phi]
-      A[] <- Q.phi %*% phi + kappa.phi
+      A[] <- Q.phi %*% phi + r.phi
       parm$phi <- phi
       parm$A <- A
       if(parm$free.beta){

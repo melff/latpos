@@ -14,6 +14,14 @@ latpos.eval.parms <- function(y,n,j,t,parm,U,replications,compute,weights){
   A <- parm$A
   B <- sweep(U,2,parm$beta,"+")
 
+  Gamma <- parm$Gamma
+  Sigma0 <- parm$Sigma0
+  Sigma1 <- parm$Sigma1
+  Lambda0 <- chol(Sigma0)
+  Lambda1 <- chol(Sigma1)
+  Theta0 <- chol2inv(Lambda0)
+  Theta1 <- chol2inv(Lambda1)
+  tau <- parm$tau
 
   ssq <- numeric(nrow(U))
 
@@ -21,36 +29,30 @@ latpos.eval.parms <- function(y,n,j,t,parm,U,replications,compute,weights){
 
     w0 <- weights[t0]
     wnon0 <- weights[tnon0]
+    bT0 <- sum(w0)
+    bT <- sum(wnon0)
+    bT1 <- bT + bT0
 
     U0 <- U[t0,,drop=FALSE]
-    diffU <- U[s1,,drop=FALSE] - parm$rho*U[s0,,drop=FALSE]
+    diffU <- U[s1,,drop=FALSE] - tcrossprod(U[s0,,drop=FALSE],parm$Gamma)
 
     ssq <- 0
-    ssq[t0] <- rowSums(w0*U0*(U0%*%parm$Theta))
-    ssq[tnon0] <- parm$tau*rowSums(wnon0*diffU*(diffU%*%parm$Theta))
+    ssq[t0] <- rowSums(w0*U0*(U0%*%Theta0))
+    ssq[tnon0] <- tau^2*rowSums(wnon0*diffU*(diffU%*%Theta1))
 
-    logdet.Theta <- logdet(parm$Theta)
-    log.tau <- log(parm$tau)
+    log.tau2 <- 2*log(tau)
+    logdet.Theta0 <- -2*sum(log(diag(Lambda0)))
+    logdet.Theta1 <- -2*sum(log(diag(Lambda1)))
 
     logDet <- 0
-    logDet[t0] <- w0*logdet.Theta
-    logDet[tnon0] <- ndim*wnon0*log.tau + wnon0*logdet.Theta
-
-    #browser()
+    logDet[t0] <- w0*logdet.Theta0
+    logDet[tnon0] <- ndim*wnon0*log.tau2 + wnon0*logdet.Theta1
 
   }
 
   if(any(c("deviance","p","logLik.j","XWX","XWy","G.j") %in% compute)){
 
-#     eta <- eta(A,B)
-#     exp.eta <- exp(eta)
-#     p <- sweep(exp.eta,2,colSums(exp.eta),"/")
-#     p.oldstyle <- p
     p <- latpos_p(A,B)
-# browser()
-    #I <- nrow(A)
-    #wn <- as.vector(rep(weights,each=I)*n)
-    #ll.oldstyle <- wn*y*log(p)
     ll <- ll_p(p,y,n,weights)
   }
 
@@ -59,7 +61,6 @@ latpos.eval.parms <- function(y,n,j,t,parm,U,replications,compute,weights){
 
     dev.resid <- ll_p(y,y,n,weights) - ll
     dev.resid[y==0] <- 0
-  #if(any(weights!=1)) browser()
     res$deviance <- 2*sum(dev.resid) + sum(ssq) - sum(logDet)
   }
   if("p" %in% compute)
@@ -69,21 +70,12 @@ latpos.eval.parms <- function(y,n,j,t,parm,U,replications,compute,weights){
 
     log.constpart <- (lfactorial(n[1,]) - colSums(lfactorial(y*n)))*as.vector(weights)
 
-    #if(nmiss.weights)browser()
     ll <- colSums(ll) + log.constpart - ssq/2 + logDet/2
     res$logLik.j <- drop(rowsum(ll,j))
 
   }
 
   if(any(c("XWX","XWy","G.j") %in% compute)){
-
-#     X <- d.eta.d.alpha(A,B)%*%parm$Q.phi
-#     if(parm$free.beta){
-# 
-#       X.beta <- d.eta.d.beta(A,U)
-#       X <- cbind(X,X.beta)
-#     }
-#     X.oldstyle <- X
 
     if(parm$free.beta){
       X <- d.eta.d.phibeta(A,B,parm$Q.phi)
@@ -93,19 +85,13 @@ latpos.eval.parms <- function(y,n,j,t,parm,U,replications,compute,weights){
 
     jtk <- rep(1:ncol(y),each=nrow(y))
 
-# browser()
   }
 
   if(any(c("XWX","XWy") %in% compute)){
-    #wX <- X - rowsum(as.vector(p)*X,jtk)[jtk,]
-    #res$XWX <- crossprod(wX,(wn*as.vector(p))*wX)
-    #XWX.oldstyle <- crossprod(wX,(wn*as.vector(p))*wX)
     res$XWX <- latpos_XWX(X,p,n,weights)
-    #browser()
   }
   if("XWy" %in% compute){
 
-    #Xr.oldstyle <- crossprod(X,wn*as.vector(y-p))
     Xr <- crossprod(X,latpos_resid(p,y,n,weights))
     psi <- parm$phi
     if(parm$free.beta)
@@ -132,9 +118,9 @@ latpos.eval.parms <- function(y,n,j,t,parm,U,replications,compute,weights){
 
     res$g.j <- sapply(resid.j,"[[",i="R")
     res$G.j <- Sapply(resid.j,"[[",i="RR")
-    res$wgwg.j<- Sapply(resid.j,"[[",i="wRwR")
-    res$wwg.j <- sapply(resid.j,"[[",i="wwR")
-    res$ww.j <- sapply(resid.j,"[[",i="ww")
+    #res$wgwg.j<- Sapply(resid.j,"[[",i="wRwR")
+    #res$wwg.j <- sapply(resid.j,"[[",i="wwR")
+    #res$ww.j <- sapply(resid.j,"[[",i="ww")
    
   }
 

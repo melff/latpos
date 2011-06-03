@@ -29,7 +29,10 @@ latpos.utilde <- function(resp,parm,maxiter=100,verbose=FALSE){
   p <- res$p
   dev <- res$deviance
 
-  Omega <- OmegaMat(Theta=parm$Theta,tau=parm$tau,rho=parm$rho,
+  Omega <- OmegaMat(Sigma0=parm$Sigma0,
+                    Sigma1=parm$Sigma1,
+                    Gamma=parm$Gamma,
+                    tau=parm$tau,
                     ndim=length(parm$latent.dims),Tj=parm$Tj)
 
   for(iter in 1:maxiter){

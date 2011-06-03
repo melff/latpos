@@ -161,3 +161,26 @@ dblocks <- function(x,f,drop=FALSE){
   lapply(i,function(i)x[i,i,drop=FALSE])
 }
 
+tr <- function(x) sum(diag(as.matrix(x)))
+
+parm2psi <- function(parm){
+
+    psi <- parm$phi
+    if(parm$free.beta) last.psi <- c(psi,parm$beta)
+    if(parm$free.Sigma!="none") {
+
+      Lambda0 <- chol(parm$Sigma0)
+      Lambda1 <- chol(parm$Sigma1)
+      kappa <- crossprod(parm$Q.kappa0,as.vector(Lambda0)) + crossprod(parm$Q.kappa1,as.vector(Lambda1))
+      psi <- c(psi,kappa)
+    }
+    if(parm$free.Gamma!="none") {
+      rho <- crossprod(parm$Q.rho,as.vector(parm$Gamma))
+      psi <- c(psi,rho)
+    }
+    if(parm$free.Sigma01=="scaled")
+      psi <- c(psi,1/parm$tau^2)
+
+    psi
+}
+

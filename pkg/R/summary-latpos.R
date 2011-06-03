@@ -23,7 +23,6 @@ vcov_VarPar <- function(parm,use.eigen=FALSE,...){
 
   Info.VarPar <- parm$Information$VarPar
   restr.VarPar <- parm$Info.restr$VarPar
-  Info.VarPar <- crossprod(restr.VarPar,Info.VarPar%*%restr.VarPar)
 
   cov.VarPar <- solve(Info.VarPar)
 
