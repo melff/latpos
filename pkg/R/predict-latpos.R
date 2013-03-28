@@ -1,4 +1,7 @@
-latpos.impute <- function(resp,parm,sampler,sample.size){
+latpos.predict_simul <- function(resp,parm,sampler,sample.size,
+                                 mc.cores = getOption("mc.cores", 2L),
+                                 verbose=FALSE,
+                                 very.silent=FALSE){
 
   j <- resp$j
   u.j <- unique(j)
@@ -18,7 +21,7 @@ latpos.impute <- function(resp,parm,sampler,sample.size){
   ll.j <- numeric(J)
 
   sampler$reset()
-  for(jj in 1:J){
+  do.unit <- function(jj){
 
     j. <- which(j==jj)
     jD. <- which(jD==jj)
@@ -37,7 +40,11 @@ latpos.impute <- function(resp,parm,sampler,sample.size){
     kept <- 0
 
     log.thresh.j <- 0
-    cat("\nUnit",jj,"\n")
+    
+    B.sim.j <- B.sim[j.,,,drop=FALSE]
+    ll.j <- ll.j[j.]
+    
+    #cat("\nUnit",jj,"\n")
     repeat{
 
         sim.tmp <- simul.B.imp(y=y.j,n=n.j,j=j.j,t=t.j,parm=parm,
@@ -54,7 +61,7 @@ latpos.impute <- function(resp,parm,sampler,sample.size){
 
           log.thresh.j <- max(log.w.tmp)+1
           kept <- 0
-          cat("  Restarting\n")
+          if(verbose) cat("  Restarting in Unit",jj,"\n")
           next
         }
 
@@ -76,16 +83,27 @@ latpos.impute <- function(resp,parm,sampler,sample.size){
           }
 
           kk <- kept + 1:n_keep
-          B.sim[j.,kk,] <- Btmp
+          B.sim.j[,kk,] <- Btmp
 
-          ll.j[j.] <- ll.j[j.] + sum(ll.tmp)/sample.size
+          ll.j <- ll.j + sum(ll.tmp)/sample.size
         }
         kept <- kept + n_keep
-        cat(" ",n_keep,"of",batch.size,"random vectors kept -",kept,"in total\n")
+        if(verbose)
+         cat(" ",n_keep,"of",batch.size,"random vectors kept -",kept,"of",sample.size,"for Unit",jj,"\n")
 
-        if(kept>=sample.size) break
+        if(kept>=sample.size){ 
+          if(!very.silent) cat("Done with Unit",jj,"\n")
+          break
+        }
     }
-
+    list(B.sim=B.sim.j,ll=ll.j)
+  }
+  require(parallel)
+  res <- mclapply(1:J,do.unit,mc.cores=mc.cores)
+  for(jj in 1:J){
+    j. <- which(j==jj)
+    B.sim[j.,,] <- res[[jj]]$B.sim[,,]
+    ll.j[j.] <- res[[jj]]$ll
   }
 
   list(B.sim=B.sim, sample.size=sample.size)
@@ -95,11 +113,12 @@ latpos.impute <- function(resp,parm,sampler,sample.size){
 
 
 predict.latpos <- function(object, newdata = NULL, id=NULL, time=NULL,
-                            type=c("posterior modes","posterior means","multiple imputation"),
+                            type=c("posterior modes","posterior means","simulate"),
                             se.fit=FALSE, interval=c("none","normal","percentile"), level=0.95,
                             sample.size = object$sample.size,
                             sampler=object$sampler,
-                            maxiter=100,...){
+                            maxiter=100,
+                            ...){
 
   type <- match.arg(type)
   interval <- match.arg(interval)
@@ -164,14 +183,14 @@ predict.latpos <- function(object, newdata = NULL, id=NULL, time=NULL,
 
     Btilde <- parm$Btilde
     iK2 <- Btilde$iK2
-    Btilde <- Btilde$B
+    B <- Btilde$B
 
     colnames(B) <- latent.dims
 
     if(se.fit || interval!="none"){
 
-      var.Btilde <- array(diag(crossprod(iK2)),dim(Btilde))
-      se.B <- sqrt(var.Btilde)
+      var.B <- array(diag(crossprod(iK2)),dim(B))
+      se.B <- sqrt(var.B)
       colnames(se.B) <- latent.dims
     }
 
@@ -190,10 +209,10 @@ predict.latpos <- function(object, newdata = NULL, id=NULL, time=NULL,
   }
   else {
 
-    Bsim <- latpos.impute(resp=resp,parm=parm,sampler=sampler,sample.size)
+    Bsim <- latpos.predict_simul(resp=resp,parm=parm,sampler=sampler,sample.size,...)
     Bsim <- Bsim$B.sim
 
-    if(type=="multiple imputation"){
+    if(type=="simulate"){
 
       return(aperm(Bsim,c(1,3,2))[orig.order,,])
     }

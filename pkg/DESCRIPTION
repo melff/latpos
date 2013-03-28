@@ -1,8 +1,8 @@
 Package: manifestos
 Type: Package
 Title: Spatial Modelling of Party Manifestos
-Version: 0.7-1
-Date: 2013-02-05  
+Version: 0.8
+Date: 2013-03-28
 Author: Martin Elff
 Maintainer: Martin Elff <martin.elff@uni-konstanz.de>
 Description: This package provides an MCEM algorithm to
@@ -12,5 +12,5 @@ Description: This package provides an MCEM algorithm to
   based on multinomial counts.
 License: GPL-2
 LazyLoad: Yes
-Depends: Matrix, mvtnorm, munfold, memisc, Rcpp (>= 0.9.4), RcppArmadillo (>= 0.2.0)
+Depends: Matrix, mvtnorm, munfold, memisc, Rcpp (>= 0.9.4), RcppArmadillo (>= 0.2.0), parallel
 LinkingTo: Rcpp, RcppArmadillo
