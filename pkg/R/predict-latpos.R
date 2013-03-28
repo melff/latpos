@@ -4,7 +4,7 @@ latpos.impute <- function(resp,parm,sampler,sample.size){
   u.j <- unique(j)
   J <- length(u.j)
 
-  Utilde <- parm$Utilde
+  Btilde <- parm$Btilde
 
   JT <- ncol(resp$y)
   ndim <- length(parm$latent.dims)
@@ -12,7 +12,7 @@ latpos.impute <- function(resp,parm,sampler,sample.size){
   sample.size <- 2*(sample.size%/%2+sample.size%%2)
   chunk.size <- getOption("latpos.chunk.size")
 
-  U.sim <- array(0,dim=c(JT,sample.size,ndim))
+  B.sim <- array(0,dim=c(JT,sample.size,ndim))
 
   jD <- rep(j,each=ndim)
   ll.j <- numeric(J)
@@ -28,10 +28,10 @@ latpos.impute <- function(resp,parm,sampler,sample.size){
     j.j <- j[j.]
     t.j <- resp$t[j.]
 
-    Utilde.j <- Utilde$U[j.,,drop=FALSE]
-    iK2.j <- Utilde$iK2[jD.,jD.,drop=FALSE]
+    Btilde.j <- Btilde$B[j.,,drop=FALSE]
+    iK2.j <- Btilde$iK2[jD.,jD.,drop=FALSE]
 
-    batch.size <- chunk.size%/%(length(Utilde.j)*4)
+    batch.size <- chunk.size%/%(length(Btilde.j)*4)
     batch.size <- 2*(batch.size%/%2)
 
     kept <- 0
@@ -40,14 +40,14 @@ latpos.impute <- function(resp,parm,sampler,sample.size){
     cat("\nUnit",jj,"\n")
     repeat{
 
-        sim.tmp <- simul.U.imp(y=y.j,n=n.j,j=j.j,t=t.j,parm=parm,
-                            Utilde=Utilde.j,
+        sim.tmp <- simul.B.imp(y=y.j,n=n.j,j=j.j,t=t.j,parm=parm,
+                            Btilde=Btilde.j,
                             iK2=iK2.j,
                             size=batch.size,
                             sampler=sampler)
         log.w.tmp <- sim.tmp$log.w
         ll.tmp <- sim.tmp$ll.cpl
-        Utmp <- sim.tmp$U
+        Btmp <- sim.tmp$B
 
         if(log.thresh.j==0) log.thresh.j <- max(log.w.tmp)+1
         else if(max(log.w.tmp)>log.thresh.j){
@@ -60,7 +60,7 @@ latpos.impute <- function(resp,parm,sampler,sample.size){
 
         keep <- log.w.tmp - log.thresh.j > log(runif(n=batch.size))
 
-        Utmp <- Utmp[,keep,,drop=FALSE]
+        Btmp <- Btmp[,keep,,drop=FALSE]
         ll.tmp <- ll.tmp[keep]
 
         n_keep <- sum(keep)
@@ -70,13 +70,13 @@ latpos.impute <- function(resp,parm,sampler,sample.size){
 
             n_keep <- sample.size - kept
             keep.tmp <- 1:n_keep
-            Utmp <- Utmp[,keep.tmp,,drop=FALSE]
+            Btmp <- Btmp[,keep.tmp,,drop=FALSE]
             ll.tmp <- ll.tmp[keep.tmp]
 
           }
 
           kk <- kept + 1:n_keep
-          U.sim[j.,kk,] <- Utmp
+          B.sim[j.,kk,] <- Btmp
 
           ll.j[j.] <- ll.j[j.] + sum(ll.tmp)/sample.size
         }
@@ -88,7 +88,7 @@ latpos.impute <- function(resp,parm,sampler,sample.size){
 
   }
 
-  list(U.sim=U.sim, sample.size=sample.size)
+  list(B.sim=B.sim, sample.size=sample.size)
 }
 
 
@@ -98,9 +98,8 @@ predict.latpos <- function(object, newdata = NULL, id=NULL, time=NULL,
                             type=c("posterior modes","posterior means","multiple imputation"),
                             se.fit=FALSE, interval=c("none","normal","percentile"), level=0.95,
                             sample.size = object$sample.size,
-                            batch.size=object$sample.size,
-                            sampler=mvnorm.sampler(),
-                            control=latpos.control()){
+                            sampler=object$sampler,
+                            maxiter=100,...){
 
   type <- match.arg(type)
   interval <- match.arg(interval)
@@ -109,8 +108,6 @@ predict.latpos <- function(object, newdata = NULL, id=NULL, time=NULL,
   latent.dims <- all.vars(formula[c(1,3)])
 
   parm <- object$parm
-
-  maxiter <- control$maxiter
 
   if(length(newdata)){
 
@@ -152,48 +149,29 @@ predict.latpos <- function(object, newdata = NULL, id=NULL, time=NULL,
     resp$s0 <- ifelse(t==0,0,s-1)
     resp$s1 <- ifelse(t==0,0,s)
 
-    parm$Utilde <- latpos.utilde(resp=resp,parm=parm,maxiter=maxiter)
+    parm$Btilde <- latpos.Btilde(resp=resp,parm=parm,maxiter=maxiter)
   }
   else {
 
     orig.order <- object$orig.order
     resp <- object$resp
     if(!is.list(parm$Utilde))
-      parm$Utilde <- latpos.utilde(resp=resp,parm=parm,maxiter=maxiter)
+      parm$Btilde <- latpos.Btilde(resp=resp,parm=parm,maxiter=maxiter)
   }
 
   beta <- parm$beta
   if(type=="posterior modes"){
 
-    Utilde <- parm$Utilde
-    iK2 <- Utilde$iK2
-    Utilde <- Utilde$U
+    Btilde <- parm$Btilde
+    iK2 <- Btilde$iK2
+    Btilde <- Btilde$B
 
-    if(length(parm$vcov))
-      vcov <- parm$vcov
-    else
-      vcov <- vcov(object)
-
-    if(parm$free.beta){
-
-      l.beta <- length(beta)
-      i.beta <- length(parm$A) + 1:l.beta
-      vcov.beta <- vcov[i.beta,i.beta]
-      se.beta <- sqrt(diag(vcov.beta))
-    }
-    else
-      se.beta <- 0*beta
-
-    B <- sweep(Utilde,2,beta,"+")
     colnames(B) <- latent.dims
 
     if(se.fit || interval!="none"){
 
-      var.Utilde <- array(diag(crossprod(iK2)),dim(Utilde))
-      if(object$fix.beta)
-        se.B <- sqrt(var.Utilde)
-      else
-        se.B <- sqrt(sweep(var.Utilde,2,se.beta^2,"+"))
+      var.Btilde <- array(diag(crossprod(iK2)),dim(Btilde))
+      se.B <- sqrt(var.Btilde)
       colnames(se.B) <- latent.dims
     }
 
@@ -212,24 +190,22 @@ predict.latpos <- function(object, newdata = NULL, id=NULL, time=NULL,
   }
   else {
 
-    Usim <- latpos.impute(resp=resp,parm=parm,sampler=sampler,sample.size)
-    Usim <- Usim$U.sim
+    Bsim <- latpos.impute(resp=resp,parm=parm,sampler=sampler,sample.size)
+    Bsim <- Bsim$B.sim
 
     if(type=="multiple imputation"){
 
-      B <- beta + aperm(Usim,c(3,1,2))
-      return(aperm(B,c(2,1,3))[orig.order,,])
+      return(aperm(Bsim,c(1,3,2))[orig.order,,])
     }
     else{ # type=="posterior means"
 
-      Usim <- aperm(Usim,c(2,1,3))
-      means.Usim <- colMeans(Usim)
-      B <- t(beta+t(means.Usim))
+      Bsim <- aperm(Bsim,c(2,1,3))
+      B <- colMeans(Bsim)
       colnames(B) <- latent.dims
 
       if(se.fit || interval=="normal"){
 
-            se.B <- t(sqrt(colMeans(Usim^2) - means.Usim^2))
+            se.B <- t(sqrt(colMeans(Bsim^2) - B^2))
             colnames(se.B) <- latent.dims
       }
       if(se.fit){
@@ -251,10 +227,9 @@ predict.latpos <- function(object, newdata = NULL, id=NULL, time=NULL,
         res <- array(B,c(dim(B),3))
         prob <- (1 - level)/2
         prob <- c(prob,1-prob)
-        B.lowup <- apply(Usim,c(2,3),quantile,probs=prob)
-        B.lowup <- beta+aperm(B.lowup,c(3,2,1))
-        B.lowup <- aperm(B.lowup,c(2,1,3))
-        res[,,2:3] <- B.lowup
+        B.lowup <- apply(Bsim,c(2,3),quantile,probs=prob)
+        
+        res[,,2:3] <- aperm(B.lowup,c(2,3,1))
         dimnames(res) <- list(dimnames(B)[[1]],latent.dims,c("fit","lwr","upr"))
         return(res[orig.order,,])
       }

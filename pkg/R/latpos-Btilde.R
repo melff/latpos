@@ -1,4 +1,4 @@
-latpos.utilde <- function(resp,parm,maxiter=100,verbose=FALSE){
+latpos.Btilde <- function(resp,parm,maxiter=100,verbose=FALSE){
 
   A <- parm$A
   y <- resp$y
@@ -16,15 +16,9 @@ latpos.utilde <- function(resp,parm,maxiter=100,verbose=FALSE){
   ij <- 1:IJ
   j <- rep(1:J,each=I)
 
-  U <- parm$Utilde
-  if(is.list(U))
-    U <- U$U
-  vecU <- as.vector(t(U))
+  B <- parm$Btilde$B
   
-  repl <- rep(1,length(y))
-
-  res <- latpos.eval.parms(y=y,n=resp$n,j=resp$j,t=t,parm=parm,U=U,
-                replications=repl,
+  res <- latpos.eval.parms(y=y,n=resp$n,j=resp$j,t=t,parm=parm,B=B,
                 compute=c("deviance","p"))
   p <- res$p
   dev <- res$deviance
@@ -32,7 +26,6 @@ latpos.utilde <- function(resp,parm,maxiter=100,verbose=FALSE){
   Omega <- OmegaMat(Sigma0=parm$Sigma0,
                     Sigma1=parm$Sigma1,
                     Gamma=parm$Gamma,
-                    tau=parm$tau,
                     ndim=length(parm$latent.dims),Tj=parm$Tj)
 
   for(iter in 1:maxiter){
@@ -41,22 +34,25 @@ latpos.utilde <- function(resp,parm,maxiter=100,verbose=FALSE){
     if(verbose) cat("\nIntegrand iteration",iter)
 
     p <- as.vector(p)
-    Z <- d.eta.d.u(A=A,U=U)
+    Z <- d.eta.d.b(A=A,B=B)
 
     P.[cbind(j,ij)] <- sqrt(n)*p
     ZWZ <- symmpart(crossprod(Z,n*p*Z) - crossprod(P.%*%Z))
     ZWZOmega <- ZWZ + Omega
 
     Zr <- crossprod(Z,n*as.vector(y-p))
-    #ZWy <- ZWZ %*% vecU + Zr
-    #vecU <- as.vector(solve(ZWZOmega,ZWy))
-    vecU <- vecU + as.vector(solve(ZWZOmega,Zr-Omega%*%vecU))
 
-    last.U <- U
-    U <- t(structure(vecU,dim=c(D,J)))
+    U <- sweep(B,2,parm$beta,"-")
 
-    res <- latpos.eval.parms(y=y,n=resp$n,j=resp$j,t=t,parm=parm,U=U,
-                replications=repl,
+    vecB <- as.vector(t(B))
+    vecU <- as.vector(t(U))
+    
+    vecB <- vecB + as.vector(solve(ZWZOmega,Zr-Omega%*%vecU))
+
+    last.B <- B
+    B <- t(structure(vecB,dim=c(D,J)))
+    
+    res <- latpos.eval.parms(y=y,n=resp$n,j=resp$j,t=t,parm=parm,B=B,
                 compute=c("deviance","p"))
     p <- res$p
     dev <- res$deviance
@@ -66,9 +62,8 @@ latpos.utilde <- function(resp,parm,maxiter=100,verbose=FALSE){
       trouble <- apply(!is.finite(p),2,any)
       if(!all(trouble)){
 
-        U[trouble,] <- last.U[trouble,]
-        res <- latpos.eval.parms(y=y,n=resp$n,j=resp$j,t=t,parm=parm,U=U,
-                      replications=repl,
+        B[trouble,] <- last.B[trouble,]
+        res <- latpos.eval.parms(y=y,n=resp$n,j=resp$j,t=t,parm=parm,B=B,
                       compute=c("deviance","p"))
         p <- res$p
         dev <- res$deviance
@@ -78,9 +73,8 @@ latpos.utilde <- function(resp,parm,maxiter=100,verbose=FALSE){
         if(is.finite(dev)) break
         if(verbose) cat("\nStep halved")
 
-        U <- (U + last.U)/2
-        res <- latpos.eval.parms(y=y,n=resp$n,j=resp$j,t=t,parm=parm,U=U,
-                      replications=repl,
+        B <- (B + last.B)/2
+        res <- latpos.eval.parms(y=y,n=resp$n,j=resp$j,t=t,parm=parm,B=B,
                       compute=c("deviance","p"))
         p <- res$p
         dev <- res$deviance
@@ -100,14 +94,13 @@ latpos.utilde <- function(resp,parm,maxiter=100,verbose=FALSE){
     if(is.finite(crit) && dev > last.dev){
 
       if(verbose) cat("\nCannot decrease deviance, backing up\n")
-      U <- last.U
-      res <- latpos.eval.parms(y=y,n=resp$n,j=resp$j,t=t,parm=parm,U=U,
-                              replications=repl,
+      B <- last.B
+      res <- latpos.eval.parms(y=y,n=resp$n,j=resp$j,t=t,parm=parm,B=B,
                               compute=c("deviance","p"))
       p <- res$p
       dev <- res$deviance
       p <- as.vector(p)
-      Z <- d.eta.d.u(A=A,U=U)
+      Z <- d.eta.d.b(A=A,B=B)
 
       P.[cbind(j,ij)] <- sqrt(n)*p
       ZWZ <- symmpart(crossprod(Z,n*p*Z) - crossprod(P.%*%Z))
@@ -119,6 +112,6 @@ latpos.utilde <- function(resp,parm,maxiter=100,verbose=FALSE){
 
   list(
     iK2 = t(solve(chol(symmpart(ZWZOmega)))),
-    U   = U
+    B   = B
   )
 }

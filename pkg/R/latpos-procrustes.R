@@ -83,17 +83,12 @@ procrustes.latpos <- function(x,target,...){
     trnsl <- trnsl[rotdims] <- transf$b
 
     x$parm.orig <- x$parm
-    x$parm.orig$U.sim <- NULL
-    x$parm.orig$w.sim <- NULL
-    
-    x$parm <- x$parm
-    x$parm$U.sim <- NULL
-    x$parm$w.sim <- NULL
 
     x$parm$A <- sweep(x$parm$A%*%Rot,2,-trnsl)
     x$parm$beta <- as.vector(x$parm$beta%*%Rot) - trnsl
-    x$parm$Utilde$U <- x$parm$Utilde$U%*%Rot
-    x$parm$Utilde <- latpos.utilde(parm=x$parm,resp=x$resp,verbose=FALSE)
+    x$parm$Btilde$B <- sweep(x$parm$Btilde$B%*%Rot,2,-trnsl)
+    Btilde <- latpos.Btilde(resp=x$resp,parm=x$parm,maxiter=100,verbose=FALSE)
+    parm$Btilde <- Btilde
 
     x$parm$Sigma <- crossprod(Rot,x$parm$Sigma%*%Rot)
 

@@ -7,16 +7,14 @@ latpos.MCEMstep <- function(resp,parm,
 
   maxiter           <- control$maxiter
   initial.size      <- control$initial.size
-  diff.Q.alpha      <- control$diff.Q.alpha
-  diff.Q.eps        <- control$diff.Q.eps
+  Lambda.alpha      <- control$Lambda.alpha
+  Lambda.eps        <- control$Lambda.eps
   diff.logLik.eps   <- control$diff.logLik.eps
   abs.diff.psi.eps  <- control$abs.diff.psi.eps
   rel.diff.psi.eps  <- control$rel.diff.psi.eps
   max.size          <- control$max.size
   min.final.size    <- control$min.final.size
-  sparsity.eps      <- control$sparsity.eps
   force.increase    <- control$force.increase
-  ll.linesearch <- control$ll.linesearch
   Q.linesearch  <- control$Q.linesearch
   
 
@@ -43,38 +41,45 @@ latpos.MCEMstep <- function(resp,parm,
     maybe.converged <- FALSE
     ## The M-step: Location parameters
     
-    parm <- latpos.AbetaMstep(resp=resp,parm=parm,latent.data=latent.data,maxiter=maxiter)
+    parm <- latpos.AMstep(resp=resp,parm=parm,latent.data=latent.data,maxiter=maxiter)
 
     ## The M-step: Variance parameters
     
-    parm <- latpos.VarParMstep(resp=resp,parm=parm,latent.data=latent.data,maxiter=maxiter)
+    parm <- latpos.LVdistMstep(resp=resp,parm=parm,latent.data=latent.data,maxiter=maxiter)
 
     ## Checking the amount of increase in the Q function
     
     Lambda.Q.res <- latpos.Lambda.Q(resp=resp,latent.data=latent.data,parm=parm,last.parm=last.parm)
 
     Q.psi <- Lambda.Q.res$Q
-    diff.Q.psi <- Lambda.Q.res$diff.Q
-    ASE.diff.Q.psi <- Lambda.Q.res$ASE.diff.Q
-    cat("\nQ improvement:",diff.Q.psi)
+    Lambda.psi <- Lambda.Q.res$Lambda
+    ASE.Lambda.psi <- Lambda.Q.res$ASE.Lambda
+    cat("\nQ improvement:",Lambda.psi)
 
     psi <- parm2psi(parm)
     
-    zval.diff.Q.psi <- diff.Q.psi/ASE.diff.Q.psi
-    crit.diff.Q.psi <- abs(diff.Q.psi + qnorm(diff.Q.alpha)*ASE.diff.Q.psi)/(.1+abs(Q.psi))
+    zval.Lambda.psi <- Lambda.psi/ASE.Lambda.psi
+    crit.Lambda.psi <- abs(Lambda.psi + qnorm(Lambda.alpha)*ASE.Lambda.psi)/(.1+abs(Q.psi))
     diff.psi <- psi - last.psi
     psi.max.diff <- max(abs(diff.psi))
     max.diff.id <- which(abs(diff.psi)==psi.max.diff)[1]
-    psi.crit <- max(abs(psi-last.psi)/(.0001+last.psi))
+    psi.crit <- max(abs((psi-last.psi)/(.0001+last.psi)))
 
     if(force.increase &&
       Q.linesearch &&
-      abs(zval.diff.Q.psi) > qnorm(1-diff.Q.alpha) &&
-      crit.diff.Q.psi > diff.Q.eps &&
+      abs(zval.Lambda.psi) > qnorm(1-Lambda.alpha) &&
+      crit.Lambda.psi > Lambda.eps &&
       psi.crit > rel.diff.psi.eps &&
       abs(psi.max.diff) > abs.diff.psi.eps &&
       used.sample.size == last.sample.size &&
-      diff.Q.psi < 0){
+      Lambda.psi < 0){
+
+      cat("\nLast value of psi:  ",last.psi)
+      cat("\nCurrent value of psi:",psi)
+      cat("\nSignificance criterion:",zval.Lambda.psi)
+      cat("\nQ difference criterion:",crit.Lambda.psi)
+      cat("\nMax abs change in psi:",psi.max.diff)
+      cat("\nMax rel change in psi:",psi.crit)
 
       cat(" -- need to conduct line search")
 
@@ -90,9 +95,9 @@ latpos.MCEMstep <- function(resp,parm,
         parm$Sigma1 <- crossprod(lambda*chol(parm$Sigma1) + mlambda*chol(last.parm$Sigma1))
         parm$tau <- lambda*parm$tau + mlambda*last.parm$tau
         Lambda.Q.res <- latpos.Lambda.Q(resp=resp,latent.data=latent.data,parm=parm,last.parm=last.parm)
-        diff.Q.psi <- Lambda.Q.res$diff.Q
-        cat(" Q improvement:",diff.Q.psi)
-        structure(-diff.Q.psi,Lambda.Q.res=Lambda.Q.res,parm=parm)
+        Lambda.psi <- Lambda.Q.res$Lambda
+        cat(" Q improvement:",Lambda.psi)
+        structure(-Lambda.psi,Lambda.Q.res=Lambda.Q.res,parm=parm)
       }
 
       opt.res <- optimise(searchFun,interval=c(0,1))
@@ -101,32 +106,32 @@ latpos.MCEMstep <- function(resp,parm,
 
       Lambda.Q.res <- attr(opt.res$objective,"Lambda.Q.res")
       Q.psi <- Lambda.Q.res$Q
-      diff.Q.psi <- Lambda.Q.res$diff.Q
-      ASE.diff.Q.psi <- Lambda.Q.res$ASE.diff.Q
+      Lambda.psi <- Lambda.Q.res$Lambda
+      ASE.Lambda.psi <- Lambda.Q.res$ASE.Lambda
 
-      zval.diff.Q.psi <- diff.Q.psi/ASE.diff.Q.psi
-      crit.diff.Q.psi <- abs(diff.Q.psi + qnorm(diff.Q.alpha)*ASE.diff.Q.psi)/(.1+abs(Q.psi))
+      zval.Lambda.psi <- Lambda.psi/ASE.Lambda.psi
+      crit.Lambda.psi <- abs(Lambda.psi + qnorm(Lambda.alpha)*ASE.Lambda.psi)/(.1+abs(Q.psi))
       diff.psi <- psi - last.psi
       psi.max.diff <- max(abs(diff.psi))
       max.diff.id <- which(abs(diff.psi)==psi.max.diff)[1]
-      psi.crit <- max(abs(diff.psi)/(.0001+last.psi))
+      psi.crit <- max(abs((psi-last.psi)/(.0001+last.psi)))
 
     }
 
     cat("\nLast value of psi:  ",last.psi)
     cat("\nCurrent value of psi:",psi)
-    cat("\nSignificance criterion:",zval.diff.Q.psi)
-    cat("\nQ difference criterion:",crit.diff.Q.psi)
+    cat("\nSignificance criterion:",zval.Lambda.psi)
+    cat("\nQ difference criterion:",crit.Lambda.psi)
     cat("\nMax abs change in psi:",psi.max.diff)
     cat("\nMax rel change in psi:",psi.crit)
 
-    diffQsign <- abs(zval.diff.Q.psi) > qnorm(1-diff.Q.alpha)
-    if(crit.diff.Q.psi < diff.Q.eps && crit.diff.Q.psi > 0) maybe.converged <- TRUE
+    diffQsign <- zval.Lambda.psi > qnorm(1-Lambda.alpha)
+    if(crit.Lambda.psi < Lambda.eps && crit.Lambda.psi > 0) maybe.converged <- TRUE
     if(psi.crit < rel.diff.psi.eps)  maybe.converged <- TRUE
     if(abs(psi.max.diff) < abs.diff.psi.eps)  maybe.converged <- TRUE
 
 
-    if(force.increase && used.sample.size == last.sample.size && diff.Q.psi<0 && diffQsign){
+    if(force.increase && used.sample.size == last.sample.size && Lambda.psi<0 && diffQsign){
 
       cat("\nCannot improve Q-function, stepping back")
       parm <- last.parm
@@ -160,7 +165,7 @@ latpos.MCEMstep <- function(resp,parm,
     else{
 
       sample.size.new <- ceiling(sample.size.start*
-                                (2*qnorm(1-abs(diff.Q.alpha))/zval.diff.Q.psi)^2
+                                (2*qnorm(1-abs(Lambda.alpha))/zval.Lambda.psi)^2
                               )
     }
 
@@ -179,8 +184,8 @@ latpos.MCEMstep <- function(resp,parm,
 
     ## First find the maximum of the integrand - for
     ## optimal importance sampling
-    Utilde <- latpos.utilde(resp=resp,parm=parm,maxiter=maxiter,verbose=FALSE)
-    parm$Utilde <- Utilde
+    Btilde <- latpos.Btilde(resp=resp,parm=parm,maxiter=maxiter,verbose=FALSE)
+    parm$Btilde <- Btilde
 
     cat("\nGenerating Monte Carlo sample - size",latent.data$sample.size)
     ## The Monte-Carlo E-step: Simulating from
@@ -202,23 +207,6 @@ latpos.MCEMstep <- function(resp,parm,
     cat(" - increase:",diff.logLik)
     cat(" - relative increase:",crit.logLik*sign(diff.logLik))
 
-#     }
-#     else {
-# 
-#       cat(" - would be a decrease:",diff.logLik)
-#       cat(" stepping back")
-# 
-#       parm <- last.parm
-#       converged<-TRUE
-#       Utilde <- latpos.utilde(resp=resp,parm=parm,maxiter=maxiter,verbose=FALSE)
-#       parm$Utilde <- Utilde
-#       latent.data <- latpos.simul(resp=resp,parm=parm,
-#                             latent.data=latent.data,
-#                             sampler=sampler)
-#       sample.size <- latent.data$sample.size
-#       parm$logLik <- logLik <- sum(latent.data$ll.j)
-#       
-#     }
 
     if(crit.logLik < diff.logLik.eps && latent.data$sample.size >= min.final.size){
 
@@ -228,8 +216,8 @@ latpos.MCEMstep <- function(resp,parm,
     
   }
 
-  trace$Q[iter,1] <- diff.Q.psi
-  trace$Q[iter,2] <- ASE.diff.Q.psi
+  trace$Q[iter,1] <- Lambda.psi
+  trace$Q[iter,2] <- ASE.Lambda.psi
   trace$Q[iter,3] <- used.sample.size
   trace$Q[iter,4] <- psi.crit
   trace$Q[iter,5] <- psi.max.diff
@@ -272,7 +260,7 @@ latpos.MCEMstep <- function(resp,parm,
     diff.psi = diff.psi,
     psi.crit = psi.crit,
     psi.max.diff = psi.max.diff,
-    diff.Q.psi = diff.Q.psi,
+    Lambda.psi = Lambda.psi,
     converged=converged
     )
 }
@@ -280,10 +268,10 @@ latpos.MCEMstep <- function(resp,parm,
 latpos.Lambda.Q <- function(resp,latent.data,parm,last.parm){
 
     w.sim <- latent.data$w.sim
-    U.sim <- latent.data$U.sim
+    B.sim <- latent.data$B.sim
 
     chunk.size <- getOption("latpos.chunk.size")
-    batch.size <- chunk.size%/%(4*prod(dim(U.sim)[c(1,3)]))
+    batch.size <- chunk.size%/%(4*prod(dim(B.sim)[c(1,3)]))
     batch.size <- 2*(batch.size%/%2-1)
     m <- latent.data$sample.size %/% batch.size
     r <- latent.data$sample.size %% batch.size
@@ -292,8 +280,8 @@ latpos.Lambda.Q <- function(resp,latent.data,parm,last.parm){
     J <- length(unique(resp$j))
     JT <- length(resp$j)
     JTK <- JT*batch.size
-    sample.size <- dim(U.sim)[2]
-    D <- dim(U.sim)[3]
+    sample.size <- dim(B.sim)[2]
+    D <- dim(B.sim)[3]
 
     j. <- resp$j
 
@@ -314,17 +302,14 @@ latpos.Lambda.Q <- function(resp,latent.data,parm,last.parm){
       kk <- 1:batch.size
       for(k in 1:m){
         #cat("#")
-        U <- array(U.sim[,kk,,drop=FALSE],c(JTK,D))
+        B <- array(B.sim[,kk,,drop=FALSE],c(JTK,D))
         w.kk <- w.sim[,kk,drop=FALSE]
         w <- w.kk[j.,]
-        repl <- rep(kk,each=JT)
         res <- latpos.eval.parms(y=y,n=n,j=j,t=t,
-                                parm=parm,U=U,weights=w,
-                                replications=repl,
+                                parm=parm,B=B,weights=w,
                                 compute="logLik.j")
         last.res <- latpos.eval.parms(y=y,n=n,j=j,t=t,
-                                parm=last.parm,U=U,weights=w,
-                                replications=repl,
+                                parm=last.parm,B=B,weights=w,
                                 compute="logLik.j")
 
         Q <- Q + sum(res$logLik.j)
@@ -347,17 +332,14 @@ latpos.Lambda.Q <- function(resp,latent.data,parm,last.parm){
         t <- rep(resp$t,r)
 
         kk <- m*batch.size + 1:r
-        U <- array(U.sim[,kk,,drop=FALSE],c(JT*r,D))
+        B <- array(B.sim[,kk,,drop=FALSE],c(JT*r,D))
         w.kk <- w.sim[,kk,drop=FALSE]
         w <- w.kk[j.,]
-        repl <- rep(kk,each=JT)
         res <- latpos.eval.parms(y=y,n=n,j=j,t=t,
-                                parm=parm,U=U,weights=w,
-                                replications=repl,
+                                parm=parm,B=B,weights=w,
                                 compute="logLik.j")
         last.res <- latpos.eval.parms(y=y,n=n,j=j,t=t,
-                                parm=last.parm,U=U,weights=w,
-                                replications=repl,
+                                parm=last.parm,B=B,weights=w,
                                 compute="logLik.j")
 
         Q <- Q + sum(res$logLik.j)
@@ -370,13 +352,13 @@ latpos.Lambda.Q <- function(resp,latent.data,parm,last.parm){
     }
 
 
-    diff.Q <- sum(sum.wLambda)
-    aVar.diff.Q <- sum(sum.sq.wLambda-2*sum.wLambda*sum.w.wLambda+sum.wLambda^2*sum.sq.w)
+    Lambda <- sum(sum.wLambda)
+    aVar.Lambda <- sum(sum.sq.wLambda-2*sum.wLambda*sum.w.wLambda+sum.wLambda^2*sum.sq.w)
 
-    ASE.diff.Q <- sqrt(aVar.diff.Q)
+    ASE.Lambda <- sqrt(aVar.Lambda)
 
     list(Q=Q,
-      diff.Q=diff.Q,
-      ASE.diff.Q=ASE.diff.Q)
+      Lambda=Lambda,
+      ASE.Lambda=ASE.Lambda)
 }
 

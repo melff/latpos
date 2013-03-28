@@ -1,7 +1,4 @@
-#ifndef _pkg_RCPP_HELLO_WORLD_H
-#define _pkg_RCPP_HELLO_WORLD_H
-
-#include <Rcpp.h>
+/*#include <Rcpp.h>*/
 #include <RcppArmadillo.h>
 
 /*
@@ -21,4 +18,3 @@ RcppExport SEXP d_eta_d_phi (SEXP A_, SEXP B_, SEXP Q_);
 RcppExport SEXP d_eta_d_phibeta  (SEXP A_, SEXP B_, SEXP Q_);
 RcppExport SEXP latpos_resid (SEXP P_, SEXP Y_, SEXP N_, SEXP W_);
 RcppExport SEXP latpos_XWX (SEXP X_, SEXP P_, SEXP N_, SEXP W_);
-#endif

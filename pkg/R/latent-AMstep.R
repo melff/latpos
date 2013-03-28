@@ -1,4 +1,4 @@
-latpos.AbetaMstep <- function(resp,parm,latent.data,maxiter){
+latpos.AMstep <- function(resp,parm,latent.data,maxiter){
 
     A <- parm$A
     beta <- parm$beta
@@ -10,7 +10,6 @@ latpos.AbetaMstep <- function(resp,parm,latent.data,maxiter){
 
 
     l.phi <- ncol(Q.phi)
-    l.beta <- if(parm$free.beta) length(beta) else 0
 
     res <- latpos.integ.ll(resp=resp,parm=parm,latent.data=latent.data,compute=c("deviance","XWX","XWy"))
     dev <- res$deviance
@@ -19,22 +18,17 @@ latpos.AbetaMstep <- function(resp,parm,latent.data,maxiter){
 
     for(iter in 1:maxiter){
 
-      cat("\nM-step Iteration",iter)
+      cat("\nM-step Iteration for alpha",iter)
 
       last.parm <- parm
       XWX <- res$XWX
       XWy <- res$XWy
 # browser()
-      psi <- solve(XWX,XWy)
+      phi <- solve(XWX,XWy)
       #cat(" psi =",psi)
-      phi <- psi[1:l.phi]
       A[] <- Q.phi %*% phi + r.phi
       parm$phi <- phi
       parm$A <- A
-      if(parm$free.beta){
-        beta <- psi[l.phi+1:l.beta]
-        parm$beta <- beta
-      }
 
       res <- latpos.integ.ll(resp=resp,parm=parm,latent.data=latent.data,compute=c("deviance","XWX","XWy"))
       last.dev <- dev
@@ -46,7 +40,6 @@ latpos.AbetaMstep <- function(resp,parm,latent.data,maxiter){
 
           parm$A <- (last.parm$A + parm$A)/2
           parm$phi <- (last.parm$phi + parm$phi)/2
-          parm$beta <- (last.parm$beta + parm$beta)/2
 
           res <- latpos.integ.ll(resp=resp,parm=parm,latent.data=latent.data,compute=c("deviance","XWX","XWy"))
           dev <- res$deviance

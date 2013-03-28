@@ -1,11 +1,11 @@
-OmegaMat <- function(Sigma0,Sigma1,Gamma,tau,ndim,Tj){
+OmegaMat <- function(Sigma0,Sigma1,Gamma,ndim,Tj){
 
    Dmat <- Dmat(Tj+1,D=ndim,Gamma=Gamma)
    Theta0 <- solve(Sigma0)
    Theta1 <- solve(Sigma1)
    Xi.j <- unlist(lapply(Tj,
               function(Tj)
-                c(list(Theta0),rep(list(tau^2*Theta1),Tj))),
+                c(list(Theta0),rep(list(Theta1),Tj))),
                 recursive=FALSE)
    Xi.j <- bdiag(Xi.j)
    crossprod(Dmat,Xi.j %*% Dmat)

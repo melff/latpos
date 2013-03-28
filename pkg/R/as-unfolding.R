@@ -2,14 +2,13 @@ as.unfolding <- function(object,...) UseMethod("as.unfolding")
 as.unfolding.latpos <- function(object,
         prediction=c("posterior modes","posterior means","multiple imputation"),
         biplot_type=c("text","density"),
-        sample.size = object$latent.data$sample.size,
-        batch.size=object$latent.data$sample.size,
+        sample.size = object$sample.size,
         ...){
 
   if(is.character(prediction)){
 
     prediction <- match.arg(prediction)
-    prediction <- predict(object,type=prediction,sample.size=sample.size,batch.size=batch.size)
+    prediction <- predict.latpos(object,type=prediction,sample.size=sample.size)
   }
 
   if(is.list(prediction)){

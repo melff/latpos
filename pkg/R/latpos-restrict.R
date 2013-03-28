@@ -78,7 +78,7 @@ standard.restrictions <- function(A){
   upper.tri.A <- upper.tri(A)
 
   C.tri <- diag(x=as.numeric(upper.tri.A))
-  C.tri <- C.tri[diag(C.tri)>0,]
+  C.tri <- C.tri[diag(C.tri)>0,,drop=FALSE]
 
   C.sum <- t(diag(nrow=ncol(A)) %x% rep(1,nrow(A)))
   C <- rbind(C.tri,C.sum)
@@ -118,4 +118,25 @@ set.parms.free2 <- function(pat,A){
   
   d <- numeric(nrow(C))
   list(C=C,d=d)
+}
+
+restr.to.symm <- function(D){
+
+  if(D < 2) stop("argument 'D' must be >=2")
+  
+  Q <- matrix(0,D^2,D^2)
+  d.e <- quick.grid(d=1:D,e=1:D)
+  d.e <- d.e[d.e[,1]>d.e[,2],,drop=FALSE]
+
+  d <- d.e[,1]
+  e <- d.e[,2]
+
+  de <- d + D*(e-1)
+  ed <- e + D*(d-1)
+
+  Q[cbind(de,de)] <- 1
+  Q[cbind(de,ed)] <- -1
+
+  Q <- Q[diag(Q)>0,,drop=FALSE]
+  restrictor(Q)
 }

@@ -72,12 +72,12 @@ d.eta.d.beta <- function(A,U){
 
 
 
-d.eta.d.u <- function(A,U){
+d.eta.d.b <- function(A,B){
 
 
     D <- ncol(A)
     I <- nrow(A)
-    J <- nrow(U)
+    J <- nrow(B)
 
     res <- Matrix(0,nrow=c(I*J),ncol=c(J*D))
 
@@ -162,25 +162,73 @@ dblocks <- function(x,f,drop=FALSE){
 }
 
 tr <- function(x) sum(diag(as.matrix(x)))
+logSymmDet <- function(M) 2*sum(log(diag(chol(M))))
+solveSymm <- function(M) chol2inv(chol(M))
 
 parm2psi <- function(parm){
 
     psi <- parm$phi
-    if(parm$free.beta) last.psi <- c(psi,parm$beta)
-    if(parm$free.Sigma!="none") {
+    if(parm$free.beta) psi <- c(psi,parm$beta)
 
-      Lambda0 <- chol(parm$Sigma0)
-      Lambda1 <- chol(parm$Sigma1)
-      kappa <- crossprod(parm$Q.kappa0,as.vector(Lambda0)) + crossprod(parm$Q.kappa1,as.vector(Lambda1))
-      psi <- c(psi,kappa)
-    }
-    if(parm$free.Gamma!="none") {
+    Lambda0 <- chol(parm$Sigma0)
+    Lambda1 <- chol(parm$Sigma1)
+    kappa <- c(
+                Lambda0[upper.tri(Lambda0,diag=TRUE)],
+                Lambda1[upper.tri(Lambda0,diag=TRUE)]
+              )
+    
+    psi <- c(psi,kappa)
+    
+    if(parm$free.Gamma) {
       rho <- crossprod(parm$Q.rho,as.vector(parm$Gamma))
       psi <- c(psi,rho)
     }
-    if(parm$free.Sigma01=="scaled")
-      psi <- c(psi,1/parm$tau^2)
 
     psi
+}
+
+gcrossprod <- function(X,Y,f){
+
+  r <- nrow(X)
+  stopifnot(nrow(Y)==r && length(f)==r)
+  
+  m <- ncol(X)
+  n <- ncol(Y)
+
+  i <- rep(1:m,n)
+  j <- rep(1:n,each=m)
+
+  R <- rowsum(X[,i,drop=FALSE]*Y[,j,drop=FALSE],f)
+  dim(R) <- c(dim(R)[1],m,n)
+  R
+}
+
+flat.gcrossprod <- function(X,Y,f){
+
+  r <- nrow(X)
+  stopifnot(nrow(Y)==r && length(f)==r)
+
+  m <- ncol(X)
+  n <- ncol(Y)
+
+  i <- rep(1:m,n)
+  j <- rep(1:n,each=m)
+
+  rowsum(X[,i,drop=FALSE]*Y[,j,drop=FALSE],f)
+}
+
+
+flat.outerprod <- function(X,Y){
+
+  r <- nrow(X)
+  stopifnot(nrow(Y)==r)
+
+  m <- ncol(X)
+  n <- ncol(Y)
+
+  i <- rep(1:m,n)
+  j <- rep(1:n,each=m)
+
+  X[,i,drop=FALSE]*Y[,j,drop=FALSE]
 }
 

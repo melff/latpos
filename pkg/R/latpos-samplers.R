@@ -15,6 +15,7 @@ mvt.sampler <- function(df,fix.seed=TRUE){
         ## Reset random seed for smoothness
         ## (This is important especially for early small samples)
         set.seed(save.seed)
+        message("\nResetting seed to ",save.seed[1]," ...")
       }
   }
 
@@ -44,7 +45,7 @@ mvt.sampler <- function(df,fix.seed=TRUE){
 }
 
 
-mvnorm.sampler <- function(alpha=0,fix.seed=TRUE){
+mvnorm.sampler <- function(fix.seed=TRUE){
 
   ## alpha > 0 can be used to exclude rare events with
   ## with heavy importance weights that may drive up
@@ -65,6 +66,7 @@ mvnorm.sampler <- function(alpha=0,fix.seed=TRUE){
         ## Reset random seed for smoothness
         ## (This is important especially for early small samples)
         set.seed(save.seed)
+        message("\nResetting seed to",save.seed)
       }
   }
 
@@ -77,7 +79,7 @@ mvnorm.sampler <- function(alpha=0,fix.seed=TRUE){
       size1 <- size %/% 2
       ii <- (1:size1)*2
       #U[1,] <- 0
-      U[ii,] <- qnorm(runif(n=size1*ndim,min=alpha/2,max=1-alpha/2))
+      U[ii,] <- qnorm(runif(n=size1*ndim,min=0,max=1))
       U[ii-1,] <- -U[ii,]
       U
   }

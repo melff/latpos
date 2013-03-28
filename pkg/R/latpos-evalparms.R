@@ -1,18 +1,12 @@
-latpos.eval.parms <- function(y,n,j,t,parm,U,replications,compute,weights){
+latpos.eval.parms <- function(y,n,j,t,parm,B,compute,weights){
 
   ndim <- length(parm$latent.dims)
   #nmiss.weights <- !missing(weights)
-  if(missing(weights)) weights <- rep(1,nrow(U))
+  if(missing(weights)) weights <- rep(1,nrow(B))
   else weights <- as.vector(weights)
 
-  s <- 1:nrow(U)
-  s0 <- ifelse(t==0,0,s-1)
-  s1 <- ifelse(t==0,0,s)
-  t0 <- which(t==0)
-  tnon0 <- t > 0
-
   A <- parm$A
-  B <- sweep(U,2,parm$beta,"+")
+  U <- sweep(B,2,parm$beta,"-")
 
   Gamma <- parm$Gamma
   Sigma0 <- parm$Sigma0
@@ -21,11 +15,16 @@ latpos.eval.parms <- function(y,n,j,t,parm,U,replications,compute,weights){
   Lambda1 <- chol(Sigma1)
   Theta0 <- chol2inv(Lambda0)
   Theta1 <- chol2inv(Lambda1)
-  tau <- parm$tau
 
   ssq <- numeric(nrow(U))
 
   if(any(c("deviance","logLik.j") %in% compute)){
+
+    s <- 1:nrow(B)
+    s0 <- ifelse(t==0,0,s-1)
+    s1 <- ifelse(t==0,0,s)
+    t0 <- which(t==0)
+    tnon0 <- t > 0
 
     w0 <- weights[t0]
     wnon0 <- weights[tnon0]
@@ -38,19 +37,18 @@ latpos.eval.parms <- function(y,n,j,t,parm,U,replications,compute,weights){
 
     ssq <- 0
     ssq[t0] <- rowSums(w0*U0*(U0%*%Theta0))
-    ssq[tnon0] <- tau^2*rowSums(wnon0*diffU*(diffU%*%Theta1))
+    ssq[tnon0] <- rowSums(wnon0*diffU*(diffU%*%Theta1))
 
-    log.tau2 <- 2*log(tau)
     logdet.Theta0 <- -2*sum(log(diag(Lambda0)))
     logdet.Theta1 <- -2*sum(log(diag(Lambda1)))
 
     logDet <- 0
     logDet[t0] <- w0*logdet.Theta0
-    logDet[tnon0] <- ndim*wnon0*log.tau2 + wnon0*logdet.Theta1
+    logDet[tnon0] <- wnon0*logdet.Theta1
 
   }
 
-  if(any(c("deviance","p","logLik.j","XWX","XWy","G.j") %in% compute)){
+  if(any(c("deviance","p","logLik.j","XWX","XWy","g.j") %in% compute)){
 
     p <- latpos_p(A,B)
     ll <- ll_p(p,y,n,weights)
@@ -75,13 +73,9 @@ latpos.eval.parms <- function(y,n,j,t,parm,U,replications,compute,weights){
 
   }
 
-  if(any(c("XWX","XWy","G.j") %in% compute)){
+  if(any(c("XWX","XWy","g.j") %in% compute)){
 
-    if(parm$free.beta){
-      X <- d.eta.d.phibeta(A,B,parm$Q.phi)
-    }
-    else
-      X <- d.eta.d.phi(A,B,parm$Q.phi)
+    X <- d.eta.d.phi(A,B,parm$Q.phi)
 
     jtk <- rep(1:ncol(y),each=nrow(y))
 
@@ -90,38 +84,19 @@ latpos.eval.parms <- function(y,n,j,t,parm,U,replications,compute,weights){
   if(any(c("XWX","XWy") %in% compute)){
     res$XWX <- latpos_XWX(X,p,n,weights)
   }
+  if("XWy" %in% compute || "g.j" %in% compute)
+    r <- latpos_resid(p,y,n,weights)
+  
   if("XWy" %in% compute){
 
-    Xr <- crossprod(X,latpos_resid(p,y,n,weights))
-    psi <- parm$phi
-    if(parm$free.beta)
-      psi <- c(psi,parm$beta)
-
-    res$XWy <- res$XWX%*%psi + Xr
+    Xr <- crossprod(X,r)
+    phi <- parm$phi
+    res$XWy <- res$XWX%*%phi + Xr
   }
-  if("G.j" %in% compute){
+  if("g.j" %in% compute){
 
-    I <- nrow(y)
-    p <- as.vector(p)
-    y <- as.vector(y)
-    n <- as.vector(n)
-    w <- as.vector(rep(weights,each=I))
-    j <- rep(j,each=I)
-    repl <- rep(replications,each=I)
-    R <- X*n*(y-p)
-    resid.j <- lapply(split(1:nrow(R),j),function(jj){
-                    R.j <- R[jj,,drop=FALSE]
-                    w.j <- w[jj]
-                    rep.j <- repl[jj]
-                    AbetaRes.j(R.j,w.j,rep.j)
-                  })
-
-    res$g.j <- sapply(resid.j,"[[",i="R")
-    res$G.j <- Sapply(resid.j,"[[",i="RR")
-    #res$wgwg.j<- Sapply(resid.j,"[[",i="wRwR")
-    #res$wwg.j <- sapply(resid.j,"[[",i="wwR")
-    #res$ww.j <- sapply(resid.j,"[[",i="ww")
-   
+    ji <- rep(j,each=nrow(y))
+    res$g.j <- rowsum(X*r,ji)
   }
 
   res
@@ -131,10 +106,10 @@ latpos.eval.parms <- function(y,n,j,t,parm,U,replications,compute,weights){
 latpos.integ.ll <- function(resp,parm,latent.data,compute){
 
     w.sim <- latent.data$w.sim
-    U.sim <- latent.data$U.sim
+    B.sim <- latent.data$B.sim
 
     chunk.size <- getOption("latpos.chunk.size")
-    batch.size <- chunk.size%/%(4*prod(dim(U.sim)[c(1,3)]))
+    batch.size <- chunk.size%/%(4*prod(dim(B.sim)[c(1,3)]))
     batch.size <- 2*(batch.size%/%2)
     m <- latent.data$sample.size %/% batch.size
     r <- latent.data$sample.size %% batch.size
@@ -142,15 +117,9 @@ latpos.integ.ll <- function(resp,parm,latent.data,compute){
     dev <- 0
     XWX <- 0
     XWy <- 0
-    G.j <- 0
-    g.j <- 0
-    wgwg.j <- 0
-    wwg.j <- 0
-    ww.j <- 0
 
     compute.XWX <- "XWX" %in% compute
     compute.XWy <- "XWy" %in% compute
-    compute.G.j <- "G.j" %in% compute
 
     I <- nrow(resp$y)
     JT <- ncol(resp$y)
@@ -170,25 +139,16 @@ latpos.integ.ll <- function(resp,parm,latent.data,compute){
       kk <- 1:batch.size
       for(k in 1:m){
 
-        U <- array(U.sim[,kk,,drop=FALSE],c(JTK,D))
+        B <- array(B.sim[,kk,,drop=FALSE],c(JTK,D))
         w <- w.sim[j.,kk,drop=FALSE]
-        repl <- rep(kk,each=JT)
         res <- latpos.eval.parms(y=y,n=n,j=j,t=t,
-                            parm=parm,U=U,weights=w,
-                            replications=repl,
+                            parm=parm,B=B,weights=w,
                             compute=compute)
         dev <- dev + res$deviance
         if(compute.XWX)
           XWX <- XWX + res$XWX
         if(compute.XWy)
           XWy <- XWy + res$XWy
-        if(compute.G.j){
-          G.j <- G.j + res$G.j
-          g.j <- g.j + res$g.j
-          wgwg.j <- wgwg.j + res$wgwg.j
-          wwg.j <- wwg.j + res$wwg.j
-          ww.j <- ww.j + res$ww.j
-          }
         kk <- kk + batch.size
       }
     }
@@ -201,25 +161,17 @@ latpos.integ.ll <- function(resp,parm,latent.data,compute){
       j <- rep(resp$j,r)
       t <- rep(resp$t,r)
 
-      U <- array(U.sim[,kk,,drop=FALSE],c(JT*r,D))
+      B <- array(B.sim[,kk,,drop=FALSE],c(JT*r,D))
       w <- w.sim[j.,kk,drop=FALSE]
       repl <- rep(kk,each=JT)
       res <- latpos.eval.parms(y=y,n=n,j=j,t=t,
-                          parm=parm,U=U,weights=w,
-                          replications=repl,
+                          parm=parm,B=B,weights=w,
                           compute=compute)
       dev <- dev + res$deviance
       if(compute.XWX)
         XWX <- XWX + res$XWX
       if(compute.XWy)
         XWy <- XWy + res$XWy
-      if(compute.G.j){
-        G.j <- G.j + res$G.j
-        g.j <- g.j + res$g.j
-        wgwg.j <- wgwg.j + res$wgwg.j
-        wwg.j <- wwg.j + res$wwg.j
-        ww.j <- ww.j + res$ww.j
-        }
     }
 
     res <- list()
@@ -228,13 +180,6 @@ latpos.integ.ll <- function(resp,parm,latent.data,compute){
       res$XWX <- XWX
     if(compute.XWy)
       res$XWy <- XWy
-    if(compute.G.j){
-      res$G.j <- G.j
-      res$g.j <- g.j
-      res$wgwg.j <- wgwg.j
-      res$wwg.j <- wwg.j
-      res$ww.j <- ww.j
-    }
 
     res
 }

@@ -11,25 +11,25 @@ latpos.simul <- function(resp,parm,latent.data,sampler){
   sample.size <- 2*(sample.size%/%2+sample.size%%2)
   chunk.size <- getOption("latpos.chunk.size")
 
-  Utilde <- parm$Utilde
+  Btilde <- parm$Btilde
 
-  if(length(latent.data$U.sim)){
+  if(length(latent.data$B.sim)){
 
-    last.size <- dim(latent.data$U.sim)[2]
+    last.size <- dim(latent.data$B.sim)[2]
     if(sample.size>last.size){
 
-      U.sim <- array(0,dim=c(JT,sample.size,ndim))
+      B.sim <- array(0,dim=c(JT,sample.size,ndim))
       w.sim <- array(0,dim=c(J,sample.size))
     }
     else{
 
-      U.sim <- latent.data$U.sim
+      B.sim <- latent.data$B.sim
       w.sim <- latent.data$w.sim
     }
   }
   else {
 
-    U.sim <- array(0,dim=c(JT,sample.size,ndim))
+    B.sim <- array(0,dim=c(JT,sample.size,ndim))
     w.sim <- array(0,dim=c(J,sample.size))
   }
 
@@ -47,10 +47,10 @@ latpos.simul <- function(resp,parm,latent.data,sampler){
     j.j <- j[j.]
     t.j <- resp$t[j.]
 
-    Utilde.j <- Utilde$U[j.,,drop=FALSE]
-    iK2.j <- Utilde$iK2[jD.,jD.,drop=FALSE]
+    Btilde.j <- Btilde$B[j.,,drop=FALSE]
+    iK2.j <- Btilde$iK2[jD.,jD.,drop=FALSE]
 
-    batch.size <- chunk.size%/%(length(Utilde.j)*4)
+    batch.size <- chunk.size%/%(length(Btilde.j)*4)
     batch.size <- 2*(batch.size%/%2)
     m <- sample.size %/% batch.size
     r <- sample.size %% batch.size
@@ -62,15 +62,15 @@ latpos.simul <- function(resp,parm,latent.data,sampler){
       kk <- 1:batch.size
       for(k in 1:m){
         #cat(".")
-        Utmp <- simul.U.imp(y=y.j,n=n.j,j=j.j,t=t.j,parm=parm,
-                            Utilde=Utilde.j,
+        Btmp <- simul.B.imp(y=y.j,n=n.j,j=j.j,t=t.j,parm=parm,
+                            Btilde=Btilde.j,
                             iK2=iK2.j,
                             size=batch.size,
                             sampler=sampler)
 
-        U.sim[j.,kk,] <- Utmp$U
-        w.sim[jj,kk] <- Utmp$log.w
-        max.log.w.tmp <- max(max.log.w.tmp,Utmp$log.w)
+        B.sim[j.,kk,] <- Btmp$B
+        w.sim[jj,kk] <- Btmp$log.w
+        max.log.w.tmp <- max(max.log.w.tmp,Btmp$log.w)
         kk <- kk + batch.size
       }
     }
@@ -79,15 +79,15 @@ latpos.simul <- function(resp,parm,latent.data,sampler){
 
       #cat(".")
       kk <- m*batch.size + 1:r
-      Utmp <- simul.U.imp(y=y.j,n=n.j,j=j.j,t=t.j,parm=parm,
-                          Utilde=Utilde.j,
+      Btmp <- simul.B.imp(y=y.j,n=n.j,j=j.j,t=t.j,parm=parm,
+                          Btilde=Btilde.j,
                           iK2=iK2.j,
                           size=r,
                           sampler=sampler)
 
-      U.sim[j.,kk,] <- Utmp$U
-      max.log.w.tmp <- max(max.log.w.tmp,Utmp$log.w)
-      w.sim[jj,kk] <- Utmp$log.w
+      B.sim[j.,kk,] <- Btmp$B
+      max.log.w.tmp <- max(max.log.w.tmp,Btmp$log.w)
+      w.sim[jj,kk] <- Btmp$log.w
     }
 
     batch.size <- chunk.size%/%4
@@ -132,26 +132,26 @@ latpos.simul <- function(resp,parm,latent.data,sampler){
     }
   }
 
-  list(U.sim=U.sim, ll.j=ll.j, w.sim=w.sim, sample.size=sample.size)
+  list(B.sim=B.sim, ll.j=ll.j, w.sim=w.sim, sample.size=sample.size)
 }
 
 
-simul.U.imp <- function(y,n,j,t,parm,Utilde,iK2,size,sampler){
+simul.B.imp <- function(y,n,j,t,parm,Btilde,iK2,size,sampler){
 
   D <- ncol(parm$A)
   I <- nrow(parm$A)
   Tj <- ncol(y)
 
-  utilde <- as.vector(t(Utilde))
-  TjD <- length(utilde)
+  btilde <- as.vector(t(Btilde))
+  TjD <- length(btilde)
 
-  U <- sampler$sample(size=size,ndim=TjD)
-  log.f.U <- sampler$log.density(U)
+  B <- sampler$sample(size=size,ndim=TjD)
+  log.f.B <- sampler$log.density(B)
 
-  U <- sweep(as.matrix(U%*%iK2),2,utilde,"+")
+  B <- sweep(as.matrix(B%*%iK2),2,btilde,"+")
 
-  dim(U) <- c(size,D,Tj)
-  U <- aperm(U,c(3,1,2))
+  dim(B) <- c(size,D,Tj)
+  B <- aperm(B,c(3,1,2))
 
   y <- as.vector(y)
   y <- rep(y,size)
@@ -160,21 +160,19 @@ simul.U.imp <- function(y,n,j,t,parm,Utilde,iK2,size,sampler){
   dim(n) <- dim(y)
   j <- rep(1:size,each=Tj)
   t <- rep(t,size)
-  repl <- rep(1,length(j))
 
-  dimU <- dim(U)
-  dim(U) <- c(prod(dimU[1:2]),dimU[3])
+  dimB <- dim(B)
+  dim(B) <- c(prod(dimB[1:2]),dimB[3])
 
-  ll <- latpos.eval.parms(y=y,n=n,j=j,t=t,parm=parm,U=U,
-                    replications=repl,
+  ll <- latpos.eval.parms(y=y,n=n,j=j,t=t,parm=parm,B=B,
                     compute=c("logLik.j")) # Each replication is a "group"
   ll <- ll$logLik.j
 
-  dim(U) <- dimU
-  log.iw <- -log.f.U + determinant(iK2)$modulus
+  dim(B) <- dimB
+  log.iw <- -log.f.B + determinant(iK2)$modulus
 
   list(
-    U = U,
+    B = B,
     ll.cpl = ll,
     log.iw = log.iw,
     log.w = ll + log.iw

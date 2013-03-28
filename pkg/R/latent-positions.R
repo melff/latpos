@@ -40,23 +40,32 @@ latpos <- function(formula,data,subset,id,time,
   resp$s0 <- ifelse(t==0,0,s-1)
   resp$s1 <- ifelse(t==0,0,s)
 
+  parm.names <- c("A","beta","Sigma","Sigma0","Sigma1","Gamma","tau")
+
+  dots <- list(...)
+  if(any(parm.names %in% names(dots))){
+    if(!length(start))
+      start <- dots[parm.names]
+    else
+      start <- c(start,dots[setdiff(parm.names,names(start))])
+  }
+
 
   if(length(start)){
     if(!is.list(start)) stop("'start' argument must be a list")
 
-    start <- start[c("A","beta","Sigma","Sigma0","Sigma1","Gamma","tau")]
+    start <- start[parm.names]
     sdf.args <- c(
                   list(
                     latent=latent.dims,manifest=manifest
                   ),
                   start,
-                  list(...)
+                  dots
                 )
     start <- do.call(latpos.start.default,sdf.args)
   }
-
-  if(!length(start)) start <- latpos.start.default(latent=latent.dims,manifest=manifest,
-                                                                              ...)
+  else
+    start <- latpos.start.default(latent=latent.dims,manifest=manifest,...)
 
   start <- start[nzchar(names(start)) & !is.na(names(start))]
   
@@ -73,6 +82,7 @@ latpos <- function(formula,data,subset,id,time,
   fit$jt.order <- jt.order
   fit$orig.order <- orig.order
   fit$start <- start
+  fit$sampler <- sampler
 
   structure(fit,
     class="latpos"
@@ -81,29 +91,19 @@ latpos <- function(formula,data,subset,id,time,
 
 
 latpos.start.default <- function(latent,manifest,
-                                 free.beta=FALSE,
-                                 free.Sigma=c("full","diagonal","scale","none"),
-                                 free.Sigma01=c("full","scaled"),
-                                 free.Gamma=c("full","none","scale","diagonal"),
+                                 free.beta=TRUE,
+                                 free.Gamma=TRUE,
                                  A,
                                  beta,
-                                 Sigma0,
-                                 Sigma1,
                                  Gamma,
-                                 tau,
                                  ...
                                  ){
 
   D <- length(latent)
   I <- length(manifest)
 
-  free.Sigma <- match.arg(free.Sigma)
-  free.Sigma01 <- match.arg(free.Sigma01)
-  free.Gamma <- match.arg(free.Gamma)
   start <- list(
       free.beta=free.beta,
-      free.Sigma=free.Sigma,
-      free.Sigma01=free.Sigma01,
       free.Gamma=free.Gamma
     )
 
@@ -127,7 +127,7 @@ latpos.start.default <- function(latent,manifest,
         }
     }
     else {
-      stop("unsported type of starting values for A")
+      stop("unsupported type of starting values for A")
     }
   }
 
@@ -136,137 +136,19 @@ latpos.start.default <- function(latent,manifest,
   else if(!free.beta)
     start$beta <- numeric(length=D)
   
-  ## Matrix enforcing restrictions on Lambda = chol(Sigma)
-  D.sq <- D*D
 
+  ## Matrix enforcing restrictions on Gamma -- so
+  ## far none implemented ...
   if(D < 2){
 
-    Q.kappa <- 1
-  }
-  else if(free.Sigma=="scale"){
-
-    D1 <- D-1
-
-    i <- 1:D1
-    ij.1 <- i+D*(1:D1-1)
-    ij.2 <- i+1+D*(2:D-1)
-
-    Q.kappa <- matrix(0,nrow=D1,ncol=D.sq)
-    Q.kappa[cbind(i,ij.1)] <- 1
-    Q.kappa[cbind(i,ij.2)] <- -1
-
-    Pat <- matrix(0,D,D)
-
-    Qutri <- diag(x=as.numeric(upper.tri(Pat)))
-    Qutri <- Qutri[diag(Qutri)>0,,drop=FALSE]
-    Qltri <- diag(x=as.numeric(lower.tri(Pat)))
-    Qltri <- Qltri[diag(Qltri)>0,,drop=FALSE]
-
-    Q.kappa <- rbind(Q.kappa,Qutri,Qltri)
-
-  }
-  else if(free.Sigma=="diagonal"){
-
-    Pat <- matrix(0,D,D)
-
-    Qutri <- diag(x=as.numeric(upper.tri(Pat)))
-    Qutri <- Qutri[diag(Qutri)>0,,drop=FALSE]
-    Qltri <- diag(x=as.numeric(lower.tri(Pat)))
-    Qltri <- Qltri[diag(Qltri)>0,,drop=FALSE]
-
-    Q.kappa <- rbind(Qutri,Qltri)
-  }
-  else if(free.Sigma=="full"){
-
-    Pat <- matrix(0,D,D)
-    Qltri <- diag(x=as.numeric(lower.tri(Pat)))
-    Q.kappa <- Qltri[diag(Qltri)>0,,drop=FALSE]
-  }
-  if(free.Sigma01=="full"){
-
-    Q.kappa <- as.matrix(bdiag(Q.kappa,Q.kappa))
+    start$Q.rho <- as.matrix(1)
   }
   else {
 
-    Q.01 <- diag(nrow=D.sq)
-    Q.01 <- cbind(Q.01,-Q.01)
-
-    Q.kappa <- rbind(
-                    cbind(Q.kappa,matrix(0,nrow=nrow(Q.kappa),ncol=ncol(Q.kappa))),
-                    Q.01)
-  }
-  Q.kappa <- restrictor(Q.kappa)$reduction
-  Q.kappa0 <- Q.kappa[1:D.sq,,drop=FALSE]
-  Q.kappa1 <- Q.kappa[D.sq + 1:D.sq,,drop=FALSE]
-  
-  start$Q.kappa <- Q.kappa
-  start$Q.kappa0 <- Q.kappa0
-  start$Q.kappa1 <- Q.kappa1
-
-  if(!missing(Sigma0))
-    start$Sigma0 <- Sigma0
-  else if(free.Sigma=="none")
-    start$Sigma0 <- diag(nrow=D)
-    
-  if(!missing(Sigma1))
-    start$Sigma1 <- Sigma1
-  else if(free.Sigma=="none")
-    start$Sigma1 <- diag(nrow=D)
-  else if(free.Sigma01 == "scaled")
-    start$Sigma1 <- start$Sigma0
-  
-
-  if(!missing(tau))
-    start$tau <- tau
-
-  ## Matrix enforcing restrictions on Gamma
-  if(D < 2){
-
-    Q.rho <- 1
-  }
-  else if(free.Gamma=="scale"){
-
-    D1 <- D-1
-
-    i <- 1:D1
-    ij.1 <- i+D*(1:D1-1)
-    ij.2 <- i+1+D*(2:D-1)
-
-    Q.rho <- matrix(0,nrow=D1,ncol=D.sq)
-    Q.rho[cbind(i,ij.1)] <- 1
-    Q.rho[cbind(i,ij.2)] <- -1
-
-    Pat <- matrix(0,D,D)
-
-    Qutri <- diag(x=as.numeric(upper.tri(Pat)))
-    Qutri <- Qutri[diag(Qutri)>0,,drop=FALSE]
-    Qltri <- diag(x=as.numeric(lower.tri(Pat)))
-    Qltri <- Qltri[diag(Qltri)>0,,drop=FALSE]
-
-    Q.rho <- rbind(Q.rho,Qutri,Qltri)
+    start$Q.rho <- diag(D*D)
 
   }
-  else if(free.Gamma=="diagonal"){
 
-    Pat <- matrix(0,D,D)
-
-    Qutri <- diag(x=as.numeric(upper.tri(Pat)))
-    Qutri <- Qutri[diag(Qutri)>0,,drop=FALSE]
-    Qltri <- diag(x=as.numeric(lower.tri(Pat)))
-    Qltri <- Qltri[diag(Qltri)>0,,drop=FALSE]
-
-    Q.rho <- rbind(Qutri,Qltri)
-  }
-  else if(free.Gamma=="full"){
-
-    start$Q.rho <- diag(nrow=D*D)
-  }
-
-  if(free.Gamma == "diagonal"){
-
-    Q.rho <- restrictor(Q.rho)$reduction
-    start$Q.rho <- Q.rho
-  }
 
   if(!missing(Gamma))
     start$Gamma <- Gamma
@@ -278,52 +160,49 @@ latpos.start.default <- function(latent,manifest,
 
 latpos.control <- function(maxiter=200,
                             initial.size=101,
-                            diff.Q.alpha=.05,
-                            diff.Q.eps=1e-7,
+                            Lambda.alpha=.05,
+                            Lambda.eps=1e-7,
                             diff.logLik.eps=1e-7,
                             abs.diff.psi.eps=0,
                             rel.diff.psi.eps=0,
                             max.size=Inf,
                             min.final.size=1000,
-                            sparsity.eps=0,
-                            force.increase=FALSE,
-                            ll.linesearch=FALSE,
-                            Q.linesearch=FALSE,
+                            force.increase=TRUE,
+                            Q.linesearch=TRUE,
                             ...){
   list(
     maxiter=maxiter,
     initial.size=initial.size,
-    diff.Q.alpha=diff.Q.alpha,
-    diff.Q.eps=diff.Q.eps,
+    Lambda.alpha=Lambda.alpha,
+    Lambda.eps=Lambda.eps,
     diff.logLik.eps=diff.logLik.eps,
     abs.diff.psi.eps=abs.diff.psi.eps,
     rel.diff.psi.eps=rel.diff.psi.eps,
     max.size=max.size,
     min.final.size=min.final.size,
-    sparsity.eps=sparsity.eps,
     force.increase=force.increase,
-    ll.linesearch=ll.linesearch,
     Q.linesearch=Q.linesearch
     )
 }
 
-latpos.start <- function(resp,latent.dims,manifest,start,unfold.method,restrictions=standard.restrictions,...){
+latpos.start <- function(resp,latent.dims,manifest,start,unfold.method,restrictions=standard.restrictions,maxiter,...){
 
   I <- length(manifest)
   D <- length(latent.dims)
 
   y <- resp$y*resp$n
   start.diffs <- sqrt(-log(sweep(y+.5,2,colSums(y+.5),"/")))
-  uf <- unfold(start.diffs,ndims=length(latent.dims),method=unfold.method,squared=TRUE)
+  uf <- unfold(start.diffs,ndims=start$ndims,method=unfold.method,squared=TRUE)
+  start$uf <- uf
   if("A" %in% names(start)){
       A <- start$A
       trans <- ProcrustesTrans(uf$B,A,translate=TRUE)
-      A. <- sweep(uf$B%*%trans$A,2,trans$b,"-")
+      A <- sweep(uf$B%*%trans$A,2,trans$b,"-")
       B <- sweep(uf$A%*%trans$A,2,trans$b,"-")
   }
   else {
-      A <- uf$B
-      B <- uf$A
+      A <- uf$B[,1:D,drop=FALSE]
+      B <- uf$A[,1:D,drop=FALSE]
   }
   colnames(A) <- latent.dims
   rownames(A) <- manifest
@@ -338,7 +217,7 @@ latpos.start <- function(resp,latent.dims,manifest,start,unfold.method,restricti
 
   if(is.function(restrictions)) restrictions <- restrictions(A)
   else if(is.list(restrictions)) restrictions <- restrictions[c("C","d")]
-  else stop("no support of restrictions with type",typeof(restrictions))
+  else stop("no support for restrictions of type",typeof(restrictions))
 
   ## Matrix enforcing the linear restrictions
   ## on A
@@ -366,15 +245,15 @@ latpos.start <- function(resp,latent.dims,manifest,start,unfold.method,restricti
   start$Q.phi <- Q.phi
   start$r.phi <- r.phi
 
-  U <- scale(B,scale=FALSE)
-  beta <- attr(U,"scaled:center")
+  beta <- colMeans(B)
+  
   if(!length(start$beta)) start$beta <- beta
 
   Gamma <- start$Gamma
 
   ## Enforce restrictions on Gamma
 
-  if(start$free.Gamma=="none") l.rho <- 0
+  if(!start$free.Gamma) l.rho <- 0
   else {
 
     Gamma <- start$Gamma
@@ -383,55 +262,50 @@ latpos.start <- function(resp,latent.dims,manifest,start,unfold.method,restricti
     l.rho <- length(rho)
   }
 
-  if(length(start$Sigma0))
-    Sigma0 <- start$Sigma0
-  else 
-    Sigma0 <- cov(U[resp$t0,,drop=FALSE])
-  if(length(start$Sigma1))
-    Sigma1 <- start$Sigma1
-  else {
-    if(start$free.Sigma01=="scaled")
-      Sigma1 <- Sigma0
-    else 
-      Sigma1 <- cov(U[resp$s1,,drop=FALSE]-tcrossprod(U[resp$s0,,drop=FALSE],Gamma))
-  }
-
-
-  if(length(start$tau)) tau <- start$tau
-  else if(start$free.Sigma01=="scaled"){
-    tau <- solve(cov(U[resp$s1,,drop=FALSE]-tcrossprod(U[resp$s0,,drop=FALSE],Gamma)),Sigma0)
-    tau <- sqrt(mean(diag(as.matrix(tau))))
-  }
-  else tau <- 1
-
-  start$Sigma0 <- Sigma0
-  start$Sigma1 <- Sigma1
-
   start$Gamma <- Gamma
 
+  ## Enforce symmetry restrictions on Sigma0 and Sigma1
+
+  if(D>1){
+
+    Q.kappa <- restr.to.symm(D)
+    start$Q.kappa0 <- start$Q.kappa1 <- Q.kappa$reduction
+  }
+  else {
+
+    start$Q.kappa0 <- start$Q.kappa1 <- as.matrix(1)
+  }
+  
+  ## Get starting values
+  
   bT1 <- sum(Tj1)
   bT <- sum(Tj)
-
-  bS00 <- crossprod(U[resp$t0,,drop=FALSE])
-  bS11 <- crossprod(U[resp$s0,,drop=FALSE])
-  bS12 <- crossprod(U[resp$s0,,drop=FALSE],U[resp$s1,,drop=FALSE])
-  bS21 <- t(bS12)
-  bS22 <- crossprod(U[resp$s1,,drop=FALSE])
 
   start$Tj <- Tj
   start$Tj1 <- Tj1
   start$latent.dims <- latent.dims
 
-  start <- varParMax(start,S22=bS22,S12=bS12,S11=bS11,S00=bS00)
+  bb0 <- colSums(B[resp$t0,,drop=FALSE])
+  bs1 <- colSums(B[resp$s0,,drop=FALSE])
+  bs2 <- colSums(B[resp$s1,,drop=FALSE])
 
-  start$Utilde <- U
+  bS00 <- crossprod(B[resp$t0,,drop=FALSE])
+  bS11 <- crossprod(B[resp$s0,,drop=FALSE])
+  bS12 <- crossprod(B[resp$s0,,drop=FALSE],B[resp$s1,,drop=FALSE])
+  bS22 <- crossprod(B[resp$s1,,drop=FALSE])
 
+  start <- LVdistMax(start,
+                      b0=bb0,s1=bs1,s2=bs2,
+                      S22=bS22,S12=bS12,S11=bS11,S00=bS00,maxiter=100,verbose=TRUE,starting=TRUE)
+  cat("\n")
+
+  start$Btilde <- list(B=B)
 
   start
 }
 
 latpos.fit <- function(resp,start,
-                            sampler=mvnorm.sampler(),
+                            sampler=mvt.sampler(df=27),
                             control=latpos.control()
           ){
 ## Fits a latent-positions state-space model with
@@ -441,15 +315,13 @@ latpos.fit <- function(resp,start,
 
   maxiter           <- control$maxiter
   initial.size      <- control$initial.size
-  diff.Q.alpha      <- control$diff.Q.alpha
-  diff.Q.eps        <- control$diff.Q.eps
+  Lambda.alpha      <- control$Lambda.alpha
+  Lambda.eps        <- control$Lambda.eps
   diff.logLik.eps   <- control$diff.logLik.eps
   abs.diff.psi.eps  <- control$abs.diff.psi.eps
   rel.diff.psi.eps  <- control$rel.diff.psi.eps
   max.size          <- control$max.size
   min.final.size    <- control$min.final.size
-  sparsity.eps      <- control$sparsity.eps
-  ll.linesearch <- control$ll.linesearch
   Q.linesearch  <- control$Q.linesearch
 
 
@@ -458,37 +330,8 @@ latpos.fit <- function(resp,start,
   latent.dims <- start$latent.dims
   ndims <- length(latent.dims)
 
-  ## Deal with empirical zeroes
-
-  if(sparsity.eps > 0){
-#browser()
-    y <- resp$y*resp$n
-    nonnull <- which(colSums(resp$y)>0)
-    y[,nonnull] <- y[,nonnull] + sparsity.eps
-    n <- array(rep(colSums(y),each=nrow(resp$y)),dim=dim(y))
-    resp$y[,nonnull] <- y[,nonnull]/n[,nonnull]
-    resp$n <- n
-    rm(y)
-  }
   ##
   sample.size <- initial.size
-
-  if(start$free.Sigma!="none"){
-
-    Lambda0 <- chol(start$Sigma0)
-    Lambda1 <- chol(start$Sigma1)
-    Q.kappa0 <- start$Q.kappa0
-    Q.kappa1 <- start$Q.kappa1
-
-    kappa <- crossprod(Q.kappa0,as.vector(Lambda0)) + crossprod(Q.kappa1,as.vector(Lambda1))
-  }
-
-  if(start$free.Gamma!="none"){
-
-    Gamma <- start$Gamma
-    Q.rho <- start$Q.rho
-    rho <- crossprod(Q.rho,as.vector(Gamma))
-  }
 
   psi <- parm2psi(start)
 
@@ -503,7 +346,7 @@ latpos.fit <- function(resp,start,
   ### The Iterations ###################
   cat("\n\n\n****** Starting Monte Carlo EM algorithm ******")
   cat("\nGenerating Monte Carlo sample(s) - size",initial.size,"- for the first step")
-  parm$Utilde <- latpos.utilde(resp=resp,parm=parm,maxiter=maxiter,verbose=FALSE)
+  parm$Btilde <- latpos.Btilde(resp=resp,parm=parm,maxiter=maxiter,verbose=FALSE)
   latent.data <- latpos.simul(resp=resp,parm=parm,
                         latent.data=list(sample.size=initial.size),
                         sampler=sampler)
@@ -528,38 +371,43 @@ latpos.fit <- function(resp,start,
     cat(paste("\n",format(Sys.time(),usetz=TRUE),"\n",sep=""))
     cat("A:\n")
     print(parm$A)
+    cat("beta:\n")
+    print(parm$beta)
     cat("Sigma0:\n")
     print(parm$Sigma0)
     cat("Sigma1:\n")
-    print(parm$Sigma1/parm$tau^2)
+    print(parm$Sigma1)
     cat("Gamma:\n")
     print(parm$Gamma)
     if(converged) break
 
   }
-  parm$zeta <- 1/parm$tau
 
-  GradInfo.Abeta <- latpos.GradInfo_Abeta(resp=resp,parm=parm,latent.data=latent.data)
-  GradInfo.VarPar <- latpos.GradInfo_VarPar(resp=resp,parm=parm,latent.data=latent.data)
+  CplInfo.phi <- latpos.CplInfo_phi(resp=resp,parm=parm,latent.data=latent.data)
+  CplInfo.LVdist <- latpos.CplInfo_LVdist(resp=resp,parm=parm,latent.data=latent.data)
+  MissInfo <- latpos.missinfo(resp=resp,parm=parm,latent.data=latent.data)
 
-  parm$Information <- list(Abeta=GradInfo.Abeta$Information,
-                           VarPar=GradInfo.VarPar$Information)
+  
+  Info.cpl <- bdiag(CplInfo.phi$Information,
+                       CplInfo.LVdist$Information)
+  Info.miss <- MissInfo$var.gradient
 
-  parm$Info.cpl <- list(Abeta=GradInfo.Abeta$Info.cpl,
-                        VarPar=GradInfo.VarPar$Info.cpl)
+  Info.restr <- bdiag(CplInfo.phi$restrictor,
+                      CplInfo.LVdist$restrictor)
 
-  parm$Info.miss <- list(Abeta=GradInfo.Abeta$Info.miss,
-                        VarPar=GradInfo.VarPar$Info.miss)
+  Info.obs <- Info.cpl - Info.miss
 
-  parm$Info.restr <- list(Abeta=GradInfo.Abeta$restrictor,
-                        VarPar=GradInfo.VarPar$restrictor)
+  parm$covmat <- Info.restr%*%tcrossprod(solve(Info.obs),Info.restr)
 
-  parm$gradient <- list(Abeta=GradInfo.Abeta$gradient,
-                        VarPar=GradInfo.VarPar$gradient)
+  parm$Information <- list( complete.data=Info.cpl,
+                            missing=Info.miss,
+                            observed.data=Info.obs,
+                            restrictor=Info.restr
+                            )
   
   list(
     resp=resp,parm=parm,
-    latent.data=latent.data,
+    sample.size=latent.data$sample.size,
     trace=trace,
     control=control,
     sampler=sampler,
@@ -611,13 +459,10 @@ print.latpos <- function(x,...){
   print.default(x$parm$beta)
   cat("\nAutoregression coefficients (Gamma):\n")
   print.default(x$parm$Gamma)
-  cat("\nStarting position variance:\n")
+  cat("\nStarting position variance (Sigma0):\n")
   print.default(x$parm$Sigma0)
-  cat("\nPosition change variance:\n")
-  if(x$parm$free.Sigma01=="scaled")
-    print.default(x$parm$Sigma1/x$parm$tau^2)
-  else
-    print.default(x$parm$Sigma1)
+  cat("\nPosition change variance (Sigma1):\n")
+  print.default(x$parm$Sigma1)
   invisible(x)
 }
 

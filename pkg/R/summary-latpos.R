@@ -1,58 +1,51 @@
-vcov_Abeta <- function(parm,use.eigen=FALSE,...){
+vcov_A <- function(parm,use.eigen=FALSE,...){
 
-  Info.Abeta <- parm$Information$Abeta
-  restr.Abeta <- parm$Info.restr$Abeta
+  Info.A <- parm$Information$A
+  restr.A <- parm$Info.restr$A
 
-  cov.Abeta <- solve(Info.Abeta)
-  if(any(diag(cov.Abeta)<0) && use.eigen){
+  cov.A <- solve(Info.A)
+  if(any(diag(cov.A)<0) && use.eigen){
 
-    eigen.Abeta <- eigen(Info.Abeta)
-    evals <- eigen.Abeta$values
-    evecs <- eigen.Abeta$vectors
+    eigen.A <- eigen(Info.A)
+    evals <- eigen.A$values
+    evecs <- eigen.A$vectors
 
     evals <- 1/evals
     evals[evals < 0] <- 0
 
-    cov.Abeta <- tcrossprod(evecs%*%diag(evals),evecs)
+    cov.A <- tcrossprod(evecs%*%diag(evals),evecs)
 
   }
-  tcrossprod(restr.Abeta%*%cov.Abeta,restr.Abeta)
+  tcrossprod(restr.A%*%cov.A,restr.A)
 }
 
-vcov_VarPar <- function(parm,use.eigen=FALSE,...){
+vcov_LVdist <- function(parm,use.eigen=FALSE,...){
 
-  Info.VarPar <- parm$Information$VarPar
-  restr.VarPar <- parm$Info.restr$VarPar
+  Info.LVdist <- parm$Information$LVdist
+  restr.LVdist <- parm$Info.restr$LVdist
 
-  cov.VarPar <- solve(Info.VarPar)
+  cov.LVdist <- solve(Info.LVdist)
 
-  if(any(diag(cov.VarPar)<0) && use.eigen){
+  if(any(diag(cov.LVdist)<0) && use.eigen){
 
-    eigen.VarPar <- eigen(Info.VarPar)
-    evals <- eigen.VarPar$values
-    evecs <- eigen.VarPar$vectors
+    eigen.LVdist <- eigen(Info.LVdist)
+    evals <- eigen.LVdist$values
+    evecs <- eigen.LVdist$vectors
 
     evals <- 1/evals
     evals[evals < 0] <- 0
 
-    cov.VarPar <- tcrossprod(evecs%*%diag(evals),evecs)
+    cov.LVdist <- tcrossprod(evecs%*%diag(evals),evecs)
 
   }
-  tcrossprod(restr.VarPar%*%cov.VarPar,restr.VarPar)
+  tcrossprod(restr.LVdist%*%cov.LVdist,restr.LVdist)
 }
 
 
 
 vcov.latpos <- function(object,use.eigen=FALSE,...) {
 
-  parm <- object$parm
-
-  cov.Abeta <- vcov_Abeta(parm,use.eigen=use.eigen,...)
-  cov.VarPar <- vcov_VarPar(parm,use.eigen=use.eigen,...)
-
-  covmat <- as.matrix(bdiag(cov.Abeta,cov.VarPar))
-
-  return(covmat)
+  return(object$parm$covmat)
 }
 
 summary.latpos <- function(object,...){
@@ -61,51 +54,50 @@ summary.latpos <- function(object,...){
 
   A <- parm$A
   beta <- parm$beta
-  Sigma <- parm$Sigma
-  rho <- parm$rho
-
+  Sigma0 <- parm$Sigma0
+  Sigma1 <- parm$Sigma1
+  Gamma <- parm$Gamma
+  Sigma1 <- Sigma1
+  
   free.beta <- parm$free.beta
-  free.rho <- parm$free.rho
-  free.Sigma <- parm$free.Sigma
-
-  zeta <- if(length(parm$zeta)) parm$zeta else 1/parm$tau
+  free.Gamma <- parm$free.Gamma
+  free.Sigma0 <- parm$free.Sigma0
+  free.Sigma1 <- parm$free.Sigma1
 
   l.A <- length(A)
   l.beta <- length(beta)
-  l.rho <- length(rho)
-  l.Sigma <- length(Sigma)
 
   i.A <- 1:l.A
-  i.beta <- if(free.beta) l.A + 1:l.beta else integer(0)
 
-  se.Abeta <- sqrt(diag(vcov_Abeta(parm,...)))
-  se.A <- se.Abeta[i.A]
-  se.beta <- if(free.beta) se.Abeta[i.beta] else 0*beta
-
-  i.Sigma <- 1:l.Sigma
-  i.rho <- if(free.rho) l.Sigma + 1 else integer(0)
-  i.zeta <- if(free.rho) l.Sigma + 2 else l.Sigma + 1
-
-  vcovVarPar <- vcov_VarPar(parm,...)
-  se.VarPar <- sqrt(diag(vcovVarPar))
-  se.Sigma <- se.VarPar[i.Sigma]
-  se.rho <- if(free.rho) se.VarPar[i.rho] else 0
-  se.zeta <- se.VarPar[i.zeta]
-
-  Sigma1 <- zeta*Sigma
-  i.Sigma.zeta <- c(i.Sigma,i.zeta)
-  vcovSigmazeta <- vcovVarPar[i.Sigma.zeta,i.Sigma.zeta]
-  d.Sigma1.d.sigma_zeta <- cbind(zeta*diag(nrow=length(Sigma)),as.vector(Sigma))
-  vcov_Sigma1 <- d.Sigma1.d.sigma_zeta %*% tcrossprod(vcovSigmazeta,d.Sigma1.d.sigma_zeta)
-  se.Sigma1 <- sqrt(diag(vcov_Sigma1))
+  se <- sqrt(diag(parm$covmat))
+  
+  se.A <- se[i.A]
 
   zval.A <- as.vector(A)/se.A
   pval.A <- 2*pnorm(abs(zval.A),lower.tail=FALSE)
   zval.A[as.vector(A)==0] <- 0
   pval.A[zval.A==0] <- 1
 
+
+  l.Sigma0 <- length(Sigma0)
+  l.Sigma1 <- length(Sigma1)
+  l.Gamma <- length(Gamma)
+
+  i.beta <- if(free.beta) l.A + 1:l.beta else integer(0)
+  i.Gamma <- l.A + l.beta + 1:l.Gamma
+  i.Sigma0 <- l.A + l.beta + l.Gamma + 1:l.Sigma0
+  i.Sigma1 <- l.A + l.beta + l.Gamma + l.Sigma0 + 1:l.Sigma1
+  
+  se.beta <- if(free.beta) se[i.beta] else 0*beta
   zval.beta <- if(free.beta) beta/se.beta else 0*beta
   pval.beta <- if(free.beta) rep(1,length(beta)) else 2*pnorm(abs(zval.beta),lower.tail=FALSE)
+  
+  se.Sigma0 <- se[i.Sigma0]
+  se.Sigma1 <- se[i.Sigma1]
+  if(!free.Gamma)
+    se.Gamma <- matrix(0,0,0)
+  else
+    se.Gamma <- se[i.Gamma]
 
   if(!length(colnames(A))) colnames(A) <- paste("Dim",seq_len(ncol(A)),sep=".")
   A.tab <- cbind(as.vector(A),se.A,zval.A,pval.A)
@@ -117,15 +109,12 @@ summary.latpos <- function(object,...){
   dim(beta.tab) <- c(length(beta),4)
   dimnames(beta.tab) <- list(names(beta),c("Estimate", "Std. Error", "z value", "Pr(>|z|)"))
 
-  Sigma.tab <- cbind(as.vector(Sigma),se.Sigma)
-  dim(Sigma.tab) <- c(dim(Sigma),2)
-  if(!length(dimnames(Sigma))){
-      dimnames(Sigma) <- list(colnames(A),colnames(A))
+  Sigma0.tab <- cbind(as.vector(Sigma0),se.Sigma0)
+  dim(Sigma0.tab) <- c(dim(Sigma0),2)
+  if(!length(dimnames(Sigma0))){
+      dimnames(Sigma0) <- list(colnames(A),colnames(A))
   }
-  dimnames(Sigma.tab) <- c(dimnames(Sigma),list(c("Estimate", "Std. Error")))
-
-  rho.tab <- structure(c(rho,se.rho),names=c("Estimate", "Std. Error"))
-  zeta.tab <- structure(c(zeta,se.rho),names=c("Estimate", "Std. Error"))
+  dimnames(Sigma0.tab) <- c(dimnames(Sigma0),list(c("Estimate", "Std. Error")))
 
   Sigma1.tab <- cbind(as.vector(Sigma1),se.Sigma1)
   dim(Sigma1.tab) <- c(dim(Sigma1),2)
@@ -133,6 +122,18 @@ summary.latpos <- function(object,...){
       dimnames(Sigma1) <- list(colnames(A),colnames(A))
   }
   dimnames(Sigma1.tab) <- c(dimnames(Sigma1),list(c("Estimate", "Std. Error")))
+
+  if(length(se.Gamma)){
+    Gamma.tab <- cbind(as.vector(Gamma),se.Gamma)
+    dim(Gamma.tab) <- c(dim(Gamma),2)
+    if(!length(dimnames(Gamma))){
+        dimnames(Gamma) <- list(colnames(A),colnames(A))
+    }
+    dimnames(Gamma.tab) <- c(dimnames(Gamma),list(c("Estimate", "Std. Error")))
+  }
+  else{
+    Gamma.tab <- NULL
+  }
 
   n <- object$resp$n
   y <- object$resp$y
@@ -159,10 +160,9 @@ summary.latpos <- function(object,...){
         tabs=list(
           A = A.tab,
           beta = beta.tab,
-          Sigma = Sigma.tab,
-          rho = rho.tab,
-          zeta = zeta.tab,
-          zeta.Sigma = Sigma1.tab
+          Sigma0 = Sigma0.tab,
+          Sigma1 = Sigma1.tab,
+          Gamma = Gamma.tab
           )
         )),
      class=c("summary.latpos","latpos")
@@ -170,27 +170,7 @@ summary.latpos <- function(object,...){
 }
 
 
-printOld.summary.latpos <- function(x,...){
 
-  cat("\nSpatial model of latent positions\n")
-
-  print.default(x$call)
-
-  cat("\nPositions of objectives:\n")
-  print.default(x$tabs$A)
-  cat("\nManifesto parameters:\n")
-  cat("\nMean positions (beta):\n")
-  print.default(x$tabs$beta)
-  cat("\nSigma:\n")
-  print.default(x$tabs$Sigma)
-  cat("\nAutoregression coefficient (rho):\n")
-  print.default(x$tabs$rho)
-  cat("\nzeta:\n")
-  print.default(x$tabs$zeta)
-  cat("\nzeta x Sigma:\n")
-  print.default(x$tabs$zeta.Sigma)
-  invisible(x)
-}
 
 formatEST <- function(x) formatC(x,digits=getOption("digits"),width=-1,format="f")
 formatSE <- function(x) paste("(",formatC(x,digits=getOption("digits"),width=-1,format="f"),")",sep="")
@@ -228,87 +208,63 @@ print.summary.latpos <- function(x,...){
                 tmp)
   dimnames(A.tab) <- NULL
 
-  Sigma.tab <- x$tabs$Sigma
-  zSigma.tab <- x$tabs$zeta.Sigma
+  Sigma0.tab <- x$tabs$Sigma0
+  Sigma1.tab <- x$tabs$Sigma1
+  Gamma.tab <- x$tabs$Gamma
 
-  if(x$parm$free.Sigma=="full"){
-  
-    tmp <- Sigma.tab
+
+  tmp <- Sigma0.tab
+  for(i in 1:ndim){
+    Sigma0.tab[,i,1] <- formatEST(tmp[,i,1])
+    Sigma0.tab[,i,2] <- formatSE(tmp[,i,2])
+    Sigma0.tab[tmp[,i,2]==0,i,2] <- ""
+    Sigma0.tab[tmp[,i,1]==0 & tmp[,i,2]==0,i,1] <- ""
+    }
+  Sigma0.tab <- aperm(Sigma0.tab,c(1,3,2))
+
+  Sigma0.tab <- array(Sigma0.tab,c(dim(Sigma0.tab)[1],prod(dim(Sigma0.tab)[2:3])))
+  Sigma0.tab <- cbind(dimn,Sigma0.tab)
+  Sigma0.tab <- rbind(c("Between units",rep("",ndim*2)),Sigma0.tab)
+
+  tmp <- Sigma1.tab
+  for(i in 1:ndim){
+    Sigma1.tab[,i,1] <- formatEST(tmp[,i,1])
+    Sigma1.tab[,i,2] <- formatSE(tmp[,i,2])
+    Sigma1.tab[tmp[,i,2]==0,i,2] <- ""
+    Sigma1.tab[tmp[,i,1]==0 & tmp[,i,2]==0,i,1] <- ""
+    }
+  Sigma1.tab <- aperm(Sigma1.tab,c(1,3,2))
+
+  Sigma1.tab <- array(Sigma1.tab,c(dim(Sigma1.tab)[1],prod(dim(Sigma1.tab)[2:3])))
+  Sigma1.tab <- cbind(dimn,Sigma1.tab)
+  Sigma1.tab <- rbind(c("Between timepoints",rep("",ndim*2)),Sigma1.tab)
+
+  posPar.tab <- rbind(c("(Co-)Variance",rep("",ndim*2)),
+                      Sigma0.tab,Sigma1.tab)
+
+
+  if(x$parm$free.Gamma){
+
+    tmp <- Gamma.tab
     for(i in 1:ndim){
-      Sigma.tab[,i,1] <- formatEST(tmp[,i,1])
-      Sigma.tab[,i,2] <- formatSE(tmp[,i,2])
-      Sigma.tab[tmp[,i,2]==0,i,2] <- ""
-      Sigma.tab[tmp[,i,1]==0 & tmp[,i,2]==0,i,1] <- ""
+      Gamma.tab[,i,1] <- formatEST(tmp[,i,1])
+      Gamma.tab[,i,2] <- formatSE(tmp[,i,2])
+      Gamma.tab[tmp[,i,2]==0,i,2] <- ""
+      Gamma.tab[tmp[,i,1]==0 & tmp[,i,2]==0,i,1] <- ""
       }
-    Sigma.tab <- aperm(Sigma.tab,c(1,3,2))
+    Gamma.tab <- aperm(Gamma.tab,c(1,3,2))
 
-    Sigma.tab <- array(Sigma.tab,c(dim(Sigma.tab)[1],prod(dim(Sigma.tab)[2:3])))
-    Sigma.tab <- cbind(dimn,Sigma.tab)
-    Sigma.tab <- rbind(c("Between units",rep("",ndim*2)),Sigma.tab)
+    Gamma.tab <- array(Gamma.tab,c(dim(Gamma.tab)[1],prod(dim(Gamma.tab)[2:3])))
+    Gamma.tab <- cbind(dimn,Gamma.tab)
+    Gamma.tab <- rbind(c("Autoregression slope",rep("",ndim*2)),Gamma.tab)
 
-    tmp <- zSigma.tab
-    for(i in 1:ndim){
-      zSigma.tab[,i,1] <- formatEST(tmp[,i,1])
-      zSigma.tab[,i,2] <- formatSE(tmp[,i,2])
-      zSigma.tab[tmp[,i,2]==0,i,2] <- ""
-      zSigma.tab[tmp[,i,1]==0 & tmp[,i,2]==0,i,1] <- ""
-      }
-    zSigma.tab <- aperm(zSigma.tab,c(1,3,2))
-
-    zSigma.tab <- array(zSigma.tab,c(dim(zSigma.tab)[1],prod(dim(zSigma.tab)[2:3])))
-    zSigma.tab <- cbind(dimn,zSigma.tab)
-    zSigma.tab <- rbind(c("Between timepoints",rep("",ndim*2)),zSigma.tab)
-
-    posPar.tab <- rbind(c("(Co-)Variance",rep("",ndim*2)),
-                        Sigma.tab,zSigma.tab)
+    posPar.tab <- rbind(Gamma.tab,posPar.tab)
 
   }
-  else{
-
-    iii <- quick.grid(1:ndim,1:2)[,c(1,1,2)]
-
-    Sigma.tab <- Sigma.tab[iii]
-    zSigma.tab <- zSigma.tab[iii]
-    dim(Sigma.tab) <- c(ndim,2)
-    dim(zSigma.tab) <- c(ndim,2)
-    
-    tmp <- Sigma.tab
-    for(i in 1:ndim){
-      Sigma.tab[i,1] <- formatEST(tmp[i,1])
-      Sigma.tab[i,2] <- formatSE(tmp[i,2])
-      }
-    
-    tmp <- zSigma.tab
-    for(i in 1:ndim){
-      zSigma.tab[i,1] <- formatEST(tmp[i,1])
-      zSigma.tab[i,2] <- formatSE(tmp[i,2])
-      }
-
-    posPar.tab <- rbind(c("Variance",rep("",ndim*2)),
-                        c("Between units",t(Sigma.tab)),
-                        c("Between timepoints",t(zSigma.tab))
-                        )
-
-  }
-
-  if(x$parm$free.rho){
-
-    rho.tab <- x$tabs$rho[1:2]
-    tmp <- rho.tab
-    rho.tab[1] <- formatEST(tmp[1])
-    rho.tab[2] <- formatSE(tmp[2])
-    tmp <- t(rep(rho.tab,ndim))
-
-    rho.tab <- cbind("Autoregression slope",tmp)
-    dimnames(rho.tab) <- NULL
-
-    posPar.tab <- rbind(rho.tab,posPar.tab)
-  }
-
 
   if(x$parm$free.beta){
 
-    beta.tab <- x$tabs$beta[,1:2]
+    beta.tab <- x$tabs$beta[,1:2,drop=FALSE]
     tmp <- beta.tab
     for(i in 1:ndim){
       beta.tab[i,1] <- formatEST(tmp[i,1])
@@ -358,28 +314,11 @@ print.summary.latpos <- function(x,...){
                     byrow=TRUE,
                     nrow=2,ncol=2)
 
-  #sumstats <- apply(sumstats,2,format,justify="right")
-  #sumstats <- apply(sumstats,1,paste,collapse="  ")
-
-  #sumstats <- c("Summary statistics:","",paste("  ",sumstats))
-  #sumstats <- paste(sumstats,"\n",collapse="")
-
-  #cat("\n")
-  #cat(sumstats)
-
   totals <- matrix(c(
                     "N. of units:",x$total.units,
                     "N. of observations:",x$total.obs,
                     "N. of counts:",x$total.counts
                     ),byrow=TRUE,ncol=2)
-
-  #totals <- apply(totals,2,format,justify="right")
-  #totals <- apply(totals,1,paste,collapse="  ")
-
-  #totals <- c("Totals:","",paste("  ",totals))
-  #totals <- paste(totals,"\n",collapse="")
-  #cat("\n")
-  #cat(totals)
 
   summaries <- rbind(sumstats,totals)
   summaries <- apply(summaries,2,format,justify="right")
@@ -401,12 +340,12 @@ print.summary.latpos <- function(x,...){
   invisible(x)
 }
 
-toLatex.summary.latpos <- function(x,...){
+toLatex.summary.latpos <- function(object,...){
 
   out <- "%Spatial model of latent positions\n%\n%"
 
 
-  A.tab <- x$tabs$A[,,1:2,drop=FALSE]
+  A.tab <- object$tabs$A[,,1:2,drop=FALSE]
   rown  <- dimnames(A.tab)[[1]]
   dimn  <- dimnames(A.tab)[[2]]
   statn <- dimnames(A.tab)[[3]]
@@ -436,87 +375,62 @@ toLatex.summary.latpos <- function(x,...){
            else tmp
   dimnames(A.tab) <- NULL
 
-  Sigma.tab <- x$tabs$Sigma
-  zSigma.tab <- x$tabs$zeta.Sigma
+  Sigma0.tab <- object$tabs$Sigma0
+  Sigma1.tab <- object$tabs$Sigma1
+  Gamma.tab <- object$tabs$Gamma
 
-  if(x$parm$free.Sigma=="full"){
+  tmp <- Sigma0.tab
+  for(i in 1:ndim){
+    Sigma0.tab[,i,1] <- formatEST(tmp[,i,1])
+    Sigma0.tab[,i,2] <- formatSE(tmp[,i,2])
+    Sigma0.tab[tmp[,i,2]==0,i,2] <- ""
+    Sigma0.tab[tmp[,i,1]==0 & tmp[,i,2]==0,i,1] <- ""
+    }
+  Sigma0.tab <- aperm(Sigma0.tab,c(1,3,2))
 
-    tmp <- Sigma.tab
+  Sigma0.tab <- array(Sigma0.tab,c(dim(Sigma0.tab)[1],prod(dim(Sigma0.tab)[2:3])))
+  Sigma0.tab <- cbind(dimn,Sigma0.tab)
+  Sigma0.tab <- rbind(c("Between units",rep("",ndim*2)),Sigma0.tab)
+
+  tmp <- Sigma1.tab
+  for(i in 1:ndim){
+    Sigma1.tab[,i,1] <- formatEST(tmp[,i,1])
+    Sigma1.tab[,i,2] <- formatSE(tmp[,i,2])
+    Sigma1.tab[tmp[,i,2]==0,i,2] <- ""
+    Sigma1.tab[tmp[,i,1]==0 & tmp[,i,2]==0,i,1] <- ""
+    }
+  Sigma1.tab <- aperm(Sigma1.tab,c(1,3,2))
+
+  Sigma1.tab <- array(Sigma1.tab,c(dim(Sigma1.tab)[1],prod(dim(Sigma1.tab)[2:3])))
+  Sigma1.tab <- cbind(dimn,Sigma1.tab)
+  Sigma1.tab <- rbind(c("Between timepoints",rep("",ndim*2)),Sigma1.tab)
+
+  posPar.tab <- rbind(c("(Co-)Variance",rep("",ndim*2)),
+                      Sigma0.tab,Sigma1.tab)
+
+
+  if(object$parm$free.Gamma){
+
+    tmp <- Gamma.tab
     for(i in 1:ndim){
-      Sigma.tab[,i,1] <- formatEST(tmp[,i,1])
-      Sigma.tab[,i,2] <- formatSE(tmp[,i,2])
-      Sigma.tab[tmp[,i,2]==0,i,2] <- ""
-      Sigma.tab[tmp[,i,1]==0 & tmp[,i,2]==0,i,1] <- ""
+      Gamma.tab[,i,1] <- formatEST(tmp[,i,1])
+      Gamma.tab[,i,2] <- formatSE(tmp[,i,2])
+      Gamma.tab[tmp[,i,2]==0,i,2] <- ""
+      Gamma.tab[tmp[,i,1]==0 & tmp[,i,2]==0,i,1] <- ""
       }
-    Sigma.tab <- aperm(Sigma.tab,c(1,3,2))
+    Gamma.tab <- aperm(Gamma.tab,c(1,3,2))
 
-    Sigma.tab <- array(Sigma.tab,c(dim(Sigma.tab)[1],prod(dim(Sigma.tab)[2:3])))
-    Sigma.tab <- cbind(dimn,Sigma.tab)
-    Sigma.tab <- rbind(c("Between units",rep("",ndim*2)),Sigma.tab)
+    Gamma.tab <- array(Gamma.tab,c(dim(Gamma.tab)[1],prod(dim(Gamma.tab)[2:3])))
+    Gamma.tab <- cbind(dimn,Gamma.tab)
+    Gamma.tab <- rbind(c("Autoregression slope",rep("",ndim*2)),Gamma.tab)
 
-    tmp <- zSigma.tab
-    for(i in 1:ndim){
-      zSigma.tab[,i,1] <- formatEST(tmp[,i,1])
-      zSigma.tab[,i,2] <- formatSE(tmp[,i,2])
-      zSigma.tab[tmp[,i,2]==0,i,2] <- ""
-      zSigma.tab[tmp[,i,1]==0 & tmp[,i,2]==0,i,1] <- ""
-      }
-    zSigma.tab <- aperm(zSigma.tab,c(1,3,2))
-
-    zSigma.tab <- array(zSigma.tab,c(dim(zSigma.tab)[1],prod(dim(zSigma.tab)[2:3])))
-    zSigma.tab <- cbind(dimn,zSigma.tab)
-    zSigma.tab <- rbind(c("Between timepoints",rep("",ndim*2)),zSigma.tab)
-
-    posPar.tab <- rbind(c("(Co-)Variance",rep("",ndim*2)),
-                        Sigma.tab,zSigma.tab)
-
-  }
-  else{
-
-    iii <- quick.grid(1:ndim,1:2)[,c(1,1,2)]
-
-    Sigma.tab <- Sigma.tab[iii]
-    zSigma.tab <- zSigma.tab[iii]
-    dim(Sigma.tab) <- c(ndim,2)
-    dim(zSigma.tab) <- c(ndim,2)
-
-    tmp <- Sigma.tab
-    for(i in 1:ndim){
-      Sigma.tab[i,1] <- formatEST(tmp[i,1])
-      Sigma.tab[i,2] <- formatSE(tmp[i,2])
-      }
-
-    tmp <- zSigma.tab
-    for(i in 1:ndim){
-      zSigma.tab[i,1] <- formatEST(tmp[i,1])
-      zSigma.tab[i,2] <- formatSE(tmp[i,2])
-      }
-
-    posPar.tab <- rbind(c("Variance",rep("",ndim*2)),
-                        c("Between units",t(Sigma.tab)),
-                        c("Between timepoints",t(zSigma.tab))
-                        )
+    posPar.tab <- rbind(Gamma.tab,posPar.tab)
 
   }
 
-  if(x$parm$free.rho){
+  if(object$parm$free.beta){
 
-    rho.tab <- x$tabs$rho[1:2]
-    tmp <- rho.tab
-    rho.tab[1] <- formatEST(tmp[1])
-    rho.tab[2] <- formatSE(tmp[2])
-    tmp <- t(rep(rho.tab,ndim))
-
-    rho.tab <- cbind("Autoregression slope",tmp)
-    dimnames(rho.tab) <- NULL
-
-    posPar.tab <- rbind(rho.tab,posPar.tab)
-  }
-
-
-  if(x$parm$free.beta){
-
-    beta.tab <- x$tabs$beta[,1:2]
+    beta.tab <- object$tabs$beta[,1:2,drop=FALSE]
     tmp <- beta.tab
     for(i in 1:ndim){
       beta.tab[i,1] <- formatEST(tmp[i,1])
@@ -559,9 +473,16 @@ toLatex.summary.latpos <- function(x,...){
   A.tab <- if(ndim > 1) c(A.tab[1:2],"\\midrule",A.tab[-(1:2)])
            else  c(A.tab[1],"\\midrule",A.tab[-1])
 
+  if(ndim>1)
+    for(dn in dimn){
+
+      pat <- paste(dn,"&")
+      subst <- paste("\\multicolumn{2}{c}{",dn,"}",sep="")
+      A.tab <- gsub(pat,subst,A.tab,fixed=TRUE)
+    }
+    
   posPar.tab <- paste(posPar.tab,"\\\\",sep="")
-  posPar.tab <- if(ndim > 1) c(posPar.tab[1:2],"\\midrule",posPar.tab[-(1:2)])
-                else c(posPar.tab[1],"\\midrule",posPar.tab[-1])
+  posPar.tab <- c(posPar.tab[1],"\\midrule",posPar.tab[-1])
 
   nc <- 2*length(dimn)
   nc1 <- nc+1
@@ -583,27 +504,19 @@ toLatex.summary.latpos <- function(x,...){
     #tail
     )
 
-  if(ndim>1)
-    for(dn in dimn){
-
-      pat <- paste(dn,"&")
-      subst <- paste("\\multicolumn{2}{c}{",dn,"}",sep="")
-      tab <- gsub(pat,subst,tab,fixed=TRUE)
-    }
-
   out <- c(out,tab)
 
   sumstats <- matrix(c(
-                    "Likelihood:",formatSumStat(x$parm$logLik),
-                    "Deviance:",formatSumStat(x$deviance)),
+                    "Likelihood:",formatSumStat(object$parm$logLik),
+                    "Deviance:",formatSumStat(object$deviance)),
                     byrow=TRUE,
                     nrow=2,ncol=2)
 
 
   totals <- matrix(c(
-                    "Number of units:",x$total.units,
-                    "Number of observations:",x$total.obs,
-                    "Sum of counts:",x$total.counts
+                    "Number of units:",object$total.units,
+                    "Number of observations:",object$total.obs,
+                    "Sum of counts:",object$total.counts
                     ),byrow=TRUE,ncol=2)
 
 
@@ -641,11 +554,11 @@ relabel.summary.latpos <- function(x,...,gsub=FALSE,fixed=TRUE,warn=FALSE){
 
   tabs$beta <- rowrename(tabs$beta,...,warn=warn)
 
-  tabs$Sigma <- colrename(tabs$Sigma,...,warn=warn)
-  tabs$Sigma <- rowrename(tabs$Sigma,...,warn=warn)
+  tabs$Sigma0 <- colrename(tabs$Sigma0,...,warn=warn)
+  tabs$Sigma0 <- rowrename(tabs$Sigma0,...,warn=warn)
 
-  tabs$zeta.Sigma <- colrename(tabs$zeta.Sigma,...,warn=warn)
-  tabs$zeta.Sigma <- rowrename(tabs$zeta.Sigma,...,warn=warn)
+  tabs$Sigma1 <- colrename(tabs$Sigma1,...,warn=warn)
+  tabs$Sigma1 <- rowrename(tabs$Sigma1,...,warn=warn)
 
   x$tabs <- tabs
 
