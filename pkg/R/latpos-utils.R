@@ -3,7 +3,6 @@ latpos_p <- function(A,B) .Call("latpos_p",A,B)
 ll_p <- function(p,y,n,weights) .Call("ll_p",p,y,n,weights)
 latpos_resid <- function(p,y,n,weights) .Call("latpos_resid",p,y,n,weights)
 
-d.eta.d.phibeta <- function(A,B,Q) .Call("d_eta_d_phibeta",A,B,Q)
 d.eta.d.phi <- function(A,B,Q) .Call("d_eta_d_phi",A,B,Q)
 
 latpos_XWX <- function(X,p,n,weights) .Call("latpos_XWX",X,p,n,weights)
@@ -50,28 +49,6 @@ d.eta.d.alpha <- function(A,B){
     res
 }
 
-d.eta.d.beta <- function(A,U){
-
-
-    D <- ncol(A)
-    I <- nrow(A)
-    J <- nrow(U)
-
-    res <- matrix(0,nrow=c(I*J),ncol=D)
-
-    ijd <- quick.grid(i=1:I,j=1:J,d=1:D)
-
-    i <- ijd[,1]
-    j <- ijd[,2]
-    d <- ijd[,3]
-    ij <- i+I*(j-1)
-
-    res[cbind(ij,d)] <- A[cbind(i,d)]
-    res
-}
-
-
-
 d.eta.d.b <- function(A,B){
 
 
@@ -88,8 +65,8 @@ d.eta.d.b <- function(A,B){
     d <- ijd[,3]
     ij <- i+I*(j-1)
     dj <- d+D*(j-1)
-
-    res[cbind(ij,dj)] <- A[cbind(i,d)]
+    
+    res[cbind(ij,dj)] <- A[cbind(i,d)]  - B[cbind(j,d)]
     res
 }
 
@@ -168,7 +145,6 @@ solveSymm <- function(M) chol2inv(chol(M))
 parm2psi <- function(parm){
 
     psi <- parm$phi
-    if(parm$free.beta) psi <- c(psi,parm$beta)
 
     Lambda0 <- chol(parm$Sigma0)
     Lambda1 <- chol(parm$Sigma1)
@@ -178,9 +154,9 @@ parm2psi <- function(parm){
               )
     
     psi <- c(psi,kappa)
-    
+        
     if(parm$free.Gamma) {
-      rho <- crossprod(parm$Q.rho,as.vector(parm$Gamma))
+      rho <- as.vector(parm$Gamma)
       psi <- c(psi,rho)
     }
 

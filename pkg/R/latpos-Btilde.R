@@ -1,117 +1,137 @@
 latpos.Btilde <- function(resp,parm,maxiter=100,verbose=FALSE){
 
-  A <- parm$A
-  y <- resp$y
-  n <- resp$n
-  t <- resp$t
+    A <- parm$A
+    y <- resp$y
+    n <- resp$n
+    j <- resp$j
+    t <- resp$t
+    t1 <- resp$t1
+    t2 <- resp$t2
 
-  I <- nrow(y)
-  J <- ncol(y)
-  D <- ncol(A)
-  IJ <- I*J
-
-  n <- as.vector(n)
-
-  P. <- Matrix(0,nrow=J,ncol=IJ)
-  ij <- 1:IJ
-  j <- rep(1:J,each=I)
-
-  B <- parm$Btilde$B
-  
-  res <- latpos.eval.parms(y=y,n=resp$n,j=resp$j,t=t,parm=parm,B=B,
-                compute=c("deviance","p"))
-  p <- res$p
-  dev <- res$deviance
-
-  Omega <- OmegaMat(Sigma0=parm$Sigma0,
-                    Sigma1=parm$Sigma1,
-                    Gamma=parm$Gamma,
-                    ndim=length(parm$latent.dims),Tj=parm$Tj)
-
-  for(iter in 1:maxiter){
-
-    last.dev <- dev
-    if(verbose) cat("\nIntegrand iteration",iter)
-
-    p <- as.vector(p)
-    Z <- d.eta.d.b(A=A,B=B)
-
-    P.[cbind(j,ij)] <- sqrt(n)*p
-    ZWZ <- symmpart(crossprod(Z,n*p*Z) - crossprod(P.%*%Z))
-    ZWZOmega <- ZWZ + Omega
-
-    Zr <- crossprod(Z,n*as.vector(y-p))
-
-    U <- sweep(B,2,parm$beta,"-")
-
-    vecB <- as.vector(t(B))
-    vecU <- as.vector(t(U))
+    D <- ncol(A)
     
-    vecB <- vecB + as.vector(solve(ZWZOmega,Zr-Omega%*%vecU))
+    Tj <- table(j)
+    J <- length(Tj)
+    TT <- sum(Tj)
+    TT1 <- TT-J
 
-    last.B <- B
-    B <- t(structure(vecB,dim=c(D,J)))
+    jj0 <- 1:(D*J)
+    jj1 <- D*J + 1:(D*TT)
+
+    Q0 <- sum0Mat(J) 
+    Q1 <- lapply(Tj,sum0Mat)
+    Q1 <- bdiag(Q1)
+    Q01 <- bdiag(Q0,Q1) %x% Diagonal(D)
     
-    res <- latpos.eval.parms(y=y,n=resp$n,j=resp$j,t=t,parm=parm,B=B,
-                compute=c("deviance","p"))
-    p <- res$p
-    dev <- res$deviance
+    Theta0 <- solve(parm$Sigma0)
+    Theta1 <- solve(parm$Sigma1)
+    Gamma <- parm$Gamma
+    
+    B0 <- parm$Btilde$B0
+    B1 <- parm$Btilde$B1
+    
+    B <- B0[j,] + B1
+    b <- c(t(B0),t(B1))
 
-    if(!is.finite(dev)){
+    D2 <- D*D
+    M01 <- Matrix(0,nrow=length(B),ncol=D*J)
+    jd <- rep((j-1)*D,each=D) + rep(1:D,length(j))
+    k <- 1:nrow(M01)
+    M01[cbind(k,jd)] <- 1
 
-      trouble <- apply(!is.finite(p),2,any)
-      if(!all(trouble)){
+    Omega0 <- Diagonal(n=J) %x% Theta0
+    Omega1 <- lapply(Tj,Omega.1j,Theta1,Gamma)
+    Omega1 <- do.call(bdiag,Omega1)
+    Omega <- bdiag(Omega0,Omega1)
+    
+    weights <- rep(1,ncol(y))
+    ll_y <- ll_p(y,y,n,weights)
+    ll_y[y==0] <- 0
 
-        B[trouble,] <- last.B[trouble,]
-        res <- latpos.eval.parms(y=y,n=resp$n,j=resp$j,t=t,parm=parm,B=B,
-                      compute=c("deviance","p"))
-        p <- res$p
-        dev <- res$deviance
-      }
-      for(iiter in 1:maxiter){
+    p <- latpos_p(A,B)
+    ll <- ll_p(p,y,n,weights)
+    dev <- sum(ll_y-ll)
 
-        if(is.finite(dev)) break
-        if(verbose) cat("\nStep halved")
+    P. <- Matrix(0,nrow=length(y),ncol=ncol(y))
+    ik <- 1:length(y)
+    k <- as.vector(col(y))
+    P.[cbind(ik,k)] <- sqrt(n)*p
+    W <- Diagonal(x=as.vector(n*p)) - tcrossprod(P.)
 
-        B <- (B + last.B)/2
-        res <- latpos.eval.parms(y=y,n=resp$n,j=resp$j,t=t,parm=parm,B=B,
-                      compute=c("deviance","p"))
-        p <- res$p
-        dev <- res$deviance
-      }
+    
+    for(iter in 1:maxiter){
 
+        last.dev <- dev
+
+        Z1 <- d.eta.d.b(A=A,B=B)
+        Z0 <- Z1 %*% M01
+        Z <- cbind(Z0,Z1)
+
+        ZWZ <- crossprod(Z,W%*%Z)
+        
+        ZWZOmega <- ZWZ + Omega
+
+        Zr <- crossprod(Z,as.vector(n*(y-p)))
+
+        last.b <- b
+
+        ZWy <- ZWZ%*%last.b + Zr
+
+        b <- Q01%*%solve(crossprod(Q01,ZWZOmega%*%Q01),crossprod(Q01,ZWy))
+        b0 <- b[jj0]
+        b1 <- b[jj1]
+        B0 <- t(matrix(b0,ncol=nrow(B0),nrow=ncol(B0)))
+        B1 <- t(matrix(b1,ncol=nrow(B1),nrow=ncol(B1)))
+
+        B <- B0[j,] + B1
+
+        p <- latpos_p(A,B)
+        ll <- ll_p(p,y,n,weights)
+        dev <- sum(ll_y-ll)
+        
+        #plot(B1[,1],type="l")
+        #Sys.sleep(0.1)
+        
+        #cat("\nIteration:",iter," Deviance:",dev)
+        while(!is.finite(dev) || dev > last.dev){
+
+            b <- (b + last.b)/2
+            b0 <- b[jj0]
+            b1 <- b[jj1]
+            B0 <- t(matrix(b0,ncol=nrow(B0),nrow=ncol(B0)))
+            B1 <- t(matrix(b1,ncol=nrow(B1),nrow=ncol(B1)))
+            
+            B <- B0[j,] + B1
+
+            p <- latpos_p(A,B)
+            ll <- ll_p(p,y,n,weights)
+            dev <- sum(ll_y-ll)
+            ## cat("\n\t Stepsize halved - new deviance:",dev)
+            if(is.finite(dev)){
+                if(dev < last.dev) break
+                crit <- abs(dev-last.dev)/abs(.1+last.dev)
+                ## cat(" criterion:",crit)
+                if(crit < 1e-7) break
+            }
+        }
+        
+        crit <- abs(dev-last.dev)/abs(.1+last.dev)
+        #cat(" criterion:",crit)
+        if(crit < 1e-7) break
     }
-    if(verbose) cat(" - deviance:",dev)
 
-    crit <- abs(dev-last.dev)/abs(.1+last.dev)
-    if(verbose && is.finite(crit)) cat(" criterion",crit)
-    if(is.finite(crit) && crit < 1e-7){
+    res <- list(B0=B0,
+                B1=B1)
+    
+    return(res)
+}
 
-      if(verbose) cat("\nConverged\n")
-      break
-    }
 
-    if(is.finite(crit) && dev > last.dev){
 
-      if(verbose) cat("\nCannot decrease deviance, backing up\n")
-      B <- last.B
-      res <- latpos.eval.parms(y=y,n=resp$n,j=resp$j,t=t,parm=parm,B=B,
-                              compute=c("deviance","p"))
-      p <- res$p
-      dev <- res$deviance
-      p <- as.vector(p)
-      Z <- d.eta.d.b(A=A,B=B)
 
-      P.[cbind(j,ij)] <- sqrt(n)*p
-      ZWZ <- symmpart(crossprod(Z,n*p*Z) - crossprod(P.%*%Z))
-      ZWZOmega <- ZWZ + Omega
-      break
-    }
 
-  }
-
-  list(
-    iK2 = t(solve(chol(symmpart(ZWZOmega)))),
-    B   = B
-  )
+sum0Mat <- function(n){
+    x <- Diagonal(n)
+    x[n,] <- -1
+    x[,-n]
 }

@@ -51,7 +51,18 @@ restrictor <- function(C,d=numeric(m),sign=7){
   ## linearly unrestriced parameters
   ## to a larger set of linearly restricted
   ## parameters
-
+    
+    if(is.matrix(C) && !length(C)){
+        m <- ncol(C)
+        I <- diag(m)
+        return(list(reduction=I,
+             projection=I,
+             offset=numeric(m),
+             C=C,
+             ginv.C=NULL,
+             d=NULL))
+    }
+    
   if(!is.matrix(C)) C <- t(as.vector(C))
 
   m <- nrow(C)
@@ -82,7 +93,8 @@ standard.restrictions <- function(A){
 
   C.sum <- t(diag(nrow=ncol(A)) %x% rep(1,nrow(A)))
   C <- rbind(C.tri,C.sum)
-
+  ## C <- C.tri
+    
   list(C=C,d=numeric(nrow(C)))
 }
 
